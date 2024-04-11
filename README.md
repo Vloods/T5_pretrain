@@ -4,22 +4,25 @@ This repo provides the source code & data of our paper "Multitask Finetuning on 
 
 
 <p align="center">
-  <img src="./figs/model_arch.png" width="500" title="DRAGON finetune overview" alt="">
+  <img src="./figs/model_arch.png" width="500" title="Model finetune overview" alt="">
 </p>
 
 
 
 ## 0. Dependencies
+Installation guide for training Roberta/T5 with H/A 100 
+Reqs: python3.8, cuda11.8, torch2.0.1, pyg2.4, transformers4.10
 
 Run the following commands to create a conda environment:
+
 ```bash
-conda create -y -n dragon python=3.8
-conda activate dragon
-pip install torch==1.10.1+cu113 torchvision -f https://download.pytorch.org/whl/cu113/torch_stable.html
+mamba create -y -n multitask_finetune python=3.8
+mamba activate multitask_finetune
+mamba install pytorch torchvision torchaudio pytorch-cuda=11.8 pyg=2.4 pytorch-sparse=0.6.17 -c pytorch -c nvidia -c pyg
 pip install transformers==4.10 wandb nltk spacy==2.1.6
 python -m spacy download en
 pip install scispacy==0.3.0
-pip install torch-scatter==2.0.9 torch-sparse==0.6.12 torch-geometric==2.0.0 -f https://pytorch-geometric.com/whl/torch-1.10.1+cu113.html
+pip install sentencepiece
 ```
 
 ## 1. Download pretrained models
