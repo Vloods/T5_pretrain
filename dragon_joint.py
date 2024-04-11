@@ -23,8 +23,6 @@ from utils import optimization_utils
 from utils import parser_utils
 from utils import utils
 
-from torchmetrics.classification import MulticlassF1Score
-
 
 import numpy as np
 
@@ -180,11 +178,9 @@ def count_parameters(loaded_params, not_loaded_params):
 import torch
 
 def calc_loss_and_acc(logits, labels, loss_type, loss_func):
-    metric = MulticlassF1Score(num_classes=5).to(logits.device)
     if logits is None:
         loss = 0.
         n_corrects = 0
-        f1 = 0.
     else:
         if loss_type == 'margin_rank':
             raise NotImplementedError
@@ -197,15 +193,15 @@ def calc_loss_and_acc(logits, labels, loss_type, loss_func):
         print(logits.argmax(1))
         print(labels)
         output = torch.nn.functional.relu(labels)
-        f1 = metric(logits.argmax(1), output)
-    return loss, n_corrects, f1
+        
+    return loss, n_corrects
 
 
 def calc_eval_accuracy(args, eval_set, model, loss_type, loss_func, debug, save_test_preds, preds_path):
     """Eval on the dev or test set - calculate loss and accuracy"""
     total_loss_acm = end_loss_acm = mlm_loss_acm = 0.0
     link_loss_acm = pos_link_loss_acm = neg_link_loss_acm = 0.0
-    n_samples_acm = n_corrects_acm = f1_acm = 0
+    n_samples_acm = n_corrects_acm = 0
     model.eval()
     save_test_preds = (save_test_preds and args.end_task)
     if save_test_preds:
@@ -215,7 +211,7 @@ def calc_eval_accuracy(args, eval_set, model, loss_type, loss_func, debug, save_
         for qids, labels, *input_data in tqdm(eval_set, desc="Dev/Test batch"):
             bs = labels.size(0)
             logits, mlm_loss, link_losses = model(*input_data)
-            end_loss, n_corrects, f1 = calc_loss_and_acc(logits, labels, loss_type, loss_func)
+            end_loss, n_corrects = calc_loss_and_acc(logits, labels, loss_type, loss_func)
             link_loss, pos_link_loss, neg_link_loss = link_losses
             loss = args.end_task * end_loss + args.mlm_task * mlm_loss + args.link_task * link_loss
 
@@ -226,7 +222,6 @@ def calc_eval_accuracy(args, eval_set, model, loss_type, loss_func, debug, save_
             pos_link_loss_acm += float(pos_link_loss)
             neg_link_loss_acm += float(neg_link_loss)
             n_corrects_acm += n_corrects
-            f1_acm += f1
             n_samples_acm += bs
 
             if save_test_preds:
@@ -238,15 +233,13 @@ def calc_eval_accuracy(args, eval_set, model, loss_type, loss_func, debug, save_
                 break
     if save_test_preds:
         f_preds.close()
-    total_loss_avg, end_loss_avg, mlm_loss_avg, link_loss_avg, pos_link_loss_avg, neg_link_loss_avg, n_corrects_avg, f1_avg = \
-        [item / n_samples_acm for item in (total_loss_acm, end_loss_acm, mlm_loss_acm, link_loss_acm, pos_link_loss_acm, neg_link_loss_acm, n_corrects_acm, f1_acm)]
-    return total_loss_avg, end_loss_avg, mlm_loss_avg, link_loss_avg, pos_link_loss_avg, neg_link_loss_avg, n_corrects_avg, f1_avg
+    total_loss_avg, end_loss_avg, mlm_loss_avg, link_loss_avg, pos_link_loss_avg, neg_link_loss_avg, n_corrects_avg = \
+        [item / n_samples_acm for item in (total_loss_acm, end_loss_acm, mlm_loss_acm, link_loss_acm, pos_link_loss_acm, neg_link_loss_acm, n_corrects_acm)]
+    return total_loss_avg, end_loss_avg, mlm_loss_avg, link_loss_avg, pos_link_loss_avg, neg_link_loss_avg, n_corrects_avg
 
 
 def train(args, resume, has_test_split, devices, kg):
     print("args: {}".format(args))
-
-    mrc_task = 1
     
     if resume:
         args.save_dir = os.path.dirname(args.resume_checkpoint)
@@ -410,8 +403,8 @@ def train(args, resume, has_test_split, devices, kg):
 
     total_loss_acm = end_loss_acm = mlm_loss_acm = end_loss_mrc_acm = 0.0
     link_loss_acm = pos_link_loss_acm = neg_link_loss_acm = 0.0
-    n_samples_acm = n_corrects_acm = n_corrects_mrc_acm = f1_acm = f1_mrc_acm = 0
-    end_loss_mrc = n_corrects_mrc = f1_mrc = 0
+    n_samples_acm = n_corrects_acm = n_corrects_mrc_acm = 0
+    end_loss_mrc = n_corrects_mrc = 0
     total_time = 0
     model.train()
     # If all the parameters are frozen in the first few epochs, just skip those epochs.
@@ -461,20 +454,20 @@ def train(args, resume, has_test_split, devices, kg):
                             print(input_data[0][a:b].size()[0], input_data_mrc[0][a:b].size()[0])
                             break
                         logits, mlm_loss, link_losses = model(*[x[a:b] for x in input_data], t_type=0) # logits: [bs, nc]
-                        end_loss, n_corrects, f1 = calc_loss_and_acc(logits, labels[a:b], args.loss, loss_func)
+                        end_loss, n_corrects = calc_loss_and_acc(logits, labels[a:b], args.loss, loss_func)
 
-                        if mrc_task:
+                        if args.mrc_task:
                             logits_mrc, mlm_loss_mrc, link_losses_mrc = model(*[x[a:b] for x in input_data_mrc], t_type=1) # logits: [bs, nc]
-                            end_loss_mrc, n_corrects_mrc, f1_mrc = calc_loss_and_acc(logits_mrc, labels_mrc[a:b], args.loss, loss_func)
+                            end_loss_mrc, n_corrects_mrc = calc_loss_and_acc(logits_mrc, labels_mrc[a:b], args.loss, loss_func)
 
 
                 else:
                     logits, mlm_loss, link_losses = model(*[x[a:b] for x in input_data]) # logits: [bs, nc]
-                    end_loss, n_corrects, f1 = calc_loss_and_acc(logits, labels[a:b], args.loss, loss_func)
+                    end_loss, n_corrects = calc_loss_and_acc(logits, labels[a:b], args.loss, loss_func)
                     logits_mrc, mlm_loss_mrc, link_losses_mrc = model(*[x[a:b] for x in input_data_mrc]) # logits: [bs, nc]
-                    end_loss_mrc, n_corrects_mrc, f1_mrc = calc_loss_and_acc(logits_mrc, labels_mrc[a:b], args.loss, loss_func)
+                    end_loss_mrc, n_corrects_mrc = calc_loss_and_acc(logits_mrc, labels_mrc[a:b], args.loss, loss_func)
                 link_loss, pos_link_loss, neg_link_loss = link_losses
-                loss = args.end_task * end_loss + args.mlm_task * mlm_loss + args.link_task * link_loss + end_loss_mrc*mrc_task
+                loss = args.end_task * end_loss + args.mlm_task * mlm_loss + args.link_task * link_loss + args.mrc_task * end_loss_mrc
 
                 total_loss_acm += float(loss)
                 end_loss_acm += float(end_loss)
@@ -483,8 +476,6 @@ def train(args, resume, has_test_split, devices, kg):
                 pos_link_loss_acm += float(pos_link_loss)
                 neg_link_loss_acm += float(neg_link_loss)
                 end_loss_mrc_acm += float(end_loss_mrc)
-                f1_acm += float(f1)
-                f1_mrc_acm += float(f1_mrc)
 
                 loss = loss / bs
                 if (args.local_rank != -1) and (not is_last):
@@ -533,13 +524,11 @@ def train(args, resume, has_test_split, devices, kg):
                                 "train_mrc_loss": end_loss_mrc_acm / n_samples_acm,
                                 "train_acc": n_corrects_acm / n_samples_acm,
                                 "train_mrc_acc": n_corrects_mrc_acm / n_samples_acm,
-                                "f1": f1_acm / n_samples_acm,
-                                "f1_mrc": f1_mrc_acm / n_samples_acm,
                                 "ms_per_batch": ms_per_batch}, step=global_step)
 
                 total_loss_acm = end_loss_acm = mlm_loss_acm = end_loss_mrc_acm = 0.0
                 link_loss_acm = pos_link_loss_acm = neg_link_loss_acm = 0.0
-                n_samples_acm = n_corrects_acm = n_corrects_mrc_acm = f1_acm = f1_mrc_acm = 0
+                n_samples_acm = n_corrects_acm = n_corrects_mrc_acm = 0
                 total_time = 0
             global_step += 1 # Number of batches processed up to now
 
@@ -547,33 +536,33 @@ def train(args, resume, has_test_split, devices, kg):
         if args.local_rank in [-1, 0]:
             model.eval()
             preds_path = os.path.join(args.save_dir, 'dev_e{}_preds.csv'.format(epoch_id))
-            dev_total_loss, dev_end_loss, dev_mlm_loss, dev_link_loss, dev_pos_link_loss, dev_neg_link_loss, dev_acc, dev_f1 = calc_eval_accuracy(args, dev_dataloader, model, args.loss, loss_func, args.debug, not args.debug, preds_path)
-            dev_total_loss_mrc, dev_end_loss_mrc, dev_mlm_loss_mrc, dev_link_loss_mrc, dev_pos_link_loss_mrc, dev_neg_link_loss_mrc, dev_acc_mrc, dev_f1_mrc = calc_eval_accuracy(args, dev_dataloader_mrc, model, args.loss, loss_func, args.debug, not args.debug, preds_path)
+            dev_total_loss, dev_end_loss, dev_mlm_loss, dev_link_loss, dev_pos_link_loss, dev_neg_link_loss, dev_acc = calc_eval_accuracy(args, dev_dataloader, model, args.loss, loss_func, args.debug, not args.debug, preds_path)
+            dev_total_loss_mrc, dev_end_loss_mrc, dev_mlm_loss_mrc, dev_link_loss_mrc, dev_pos_link_loss_mrc, dev_neg_link_loss_mrc, dev_acc_mrc = calc_eval_accuracy(args, dev_dataloader_mrc, model, args.loss, loss_func, args.debug, not args.debug, preds_path)
             print ('dev_acc', dev_acc)
             if args.end_task and (args.mlm_task or args.link_task):
                 dev_dataloader.set_eval_end_task_mode(True)
-                _, dev_end_loss, _, _,_,_, dev_acc, dev_f1 = calc_eval_accuracy(args, dev_dataloader, model, args.loss, loss_func, args.debug, not args.debug, preds_path)
+                _, dev_end_loss, _, _,_,_, dev_acc = calc_eval_accuracy(args, dev_dataloader, model, args.loss, loss_func, args.debug, not args.debug, preds_path)
                 dev_dataloader.set_eval_end_task_mode(False)
-            if mrc_task:    
+            if args.mrc_task:    
                 dev_dataloader_mrc.set_eval_end_task_mode(True)
-                _, dev_end_loss_mrc, _, _,_,_, dev_acc_mrc, dev_f1_mrc = calc_eval_accuracy(args, dev_dataloader_mrc, model, args.loss, loss_func, args.debug, not args.debug, preds_path)
+                _, dev_end_loss_mrc, _, _,_,_, dev_acc_mrc = calc_eval_accuracy(args, dev_dataloader_mrc, model, args.loss, loss_func, args.debug, not args.debug, preds_path)
                 dev_dataloader_mrc.set_eval_end_task_mode(False)
                 print ('dev_acc (eval_end_task_mode)', dev_acc)
 
             if has_test_split:
                 preds_path = os.path.join(args.save_dir, 'test_e{}_preds.csv'.format(epoch_id))
-                test_total_loss, test_end_loss, test_mlm_loss, test_link_loss, test_pos_link_loss, test_neg_link_loss, test_acc, test_f1 = calc_eval_accuracy(args, test_dataloader, model, args.loss, loss_func, args.debug, not args.debug, preds_path)
-                if mrc_task:
+                test_total_loss, test_end_loss, test_mlm_loss, test_link_loss, test_pos_link_loss, test_neg_link_loss, test_acc = calc_eval_accuracy(args, test_dataloader, model, args.loss, loss_func, args.debug, not args.debug, preds_path)
+                if args.mrc_task:
                     preds_path = os.path.join(args.save_dir, 'test_e{}_preds.csv'.format(epoch_id))
-                    test_total_loss_mrc, test_end_loss_mrc, test_mlm_loss_mrc, test_link_loss_mrc, test_pos_link_loss_mrc, test_neg_link_loss_mrc, test_acc_mrc, test_f1_mrc = calc_eval_accuracy(args, test_dataloader_mrc, model, args.loss, loss_func, args.debug, not args.debug, preds_path)
+                    test_total_loss_mrc, test_end_loss_mrc, test_mlm_loss_mrc, test_link_loss_mrc, test_pos_link_loss_mrc, test_neg_link_loss_mrc, test_acc_mrc = calc_eval_accuracy(args, test_dataloader_mrc, model, args.loss, loss_func, args.debug, not args.debug, preds_path)
                 print ('test_acc', test_acc)
                 if args.end_task and (args.mlm_task or args.link_task):
                     test_dataloader.set_eval_end_task_mode(True)
-                    _, test_end_loss, _, _,_,_, test_acc, test_f1 = calc_eval_accuracy(args, test_dataloader, model, args.loss, loss_func, args.debug, not args.debug, preds_path)
+                    _, test_end_loss, _, _,_,_, test_acc = calc_eval_accuracy(args, test_dataloader, model, args.loss, loss_func, args.debug, not args.debug, preds_path)
                     test_dataloader.set_eval_end_task_mode(False)
-                    if mrc_task:
+                    if args.mrc_task:
                         test_dataloader_mrc.set_eval_end_task_mode(True)
-                        _, test_end_loss_mrc, _, _,_,_, test_acc_mrc, test_f1_mrc = calc_eval_accuracy(args, test_dataloader_mrc, model, args.loss, loss_func, args.debug, not args.debug, preds_path)
+                        _, test_end_loss_mrc, _, _,_,_, test_acc_mrc = calc_eval_accuracy(args, test_dataloader_mrc, model, args.loss, loss_func, args.debug, not args.debug, preds_path)
                         test_dataloader_mrc.set_eval_end_task_mode(False)
                     print ('test_acc (eval_end_task_mode)', test_acc)
             else:
@@ -591,13 +580,13 @@ def train(args, resume, has_test_split, devices, kg):
                 with open(log_path, 'a') as fout:
                     fout.write('{:3},{:5},{:7.4f},{:7.4f},{:7.4f},{:7.4f},{:3}\n'.format(epoch_id, global_step, dev_acc, test_acc, best_dev_acc, final_test_acc, best_dev_epoch))
 
-            wandb.log({"dev_acc": dev_acc, "dev_f1": dev_f1, "dev_loss": dev_total_loss, "dev_end_loss": dev_end_loss, "dev_mlm_loss": dev_mlm_loss, "dev_link_loss": dev_link_loss, "dev_pos_link_loss": dev_pos_link_loss, "dev_neg_link_loss": dev_neg_link_loss, "best_dev_acc": best_dev_acc, "best_dev_epoch": best_dev_epoch}, step=global_step)
-            if mrc_task:
-                wandb.log({"dev_acc_mrc": dev_acc_mrc, "dev_f1_mrc": dev_f1_mrc,"dev_end_loss_mrc": dev_end_loss_mrc}, step=global_step)
+            wandb.log({"dev_acc": dev_acc, "dev_loss": dev_total_loss, "dev_end_loss": dev_end_loss, "dev_mlm_loss": dev_mlm_loss, "dev_link_loss": dev_link_loss, "dev_pos_link_loss": dev_pos_link_loss, "dev_neg_link_loss": dev_neg_link_loss, "best_dev_acc": best_dev_acc, "best_dev_epoch": best_dev_epoch}, step=global_step)
+            if args.mrc_task:
+                wandb.log({"dev_acc_mrc": dev_acc_mrc,"dev_end_loss_mrc": dev_end_loss_mrc}, step=global_step)
             if has_test_split:
-                wandb.log({"test_acc": test_acc, "test_f1": test_f1, "test_loss": test_total_loss, "test_link_loss": test_link_loss, "test_pos_link_loss": test_pos_link_loss, "test_neg_link_loss": test_neg_link_loss, "test_end_loss": test_end_loss, "test_mlm_loss": test_mlm_loss, "final_test_acc": final_test_acc}, step=global_step)
-                if mrc_task:
-                    wandb.log({"test_acc_mrc": test_acc_mrc, "test_f1_mrc": test_f1_mrc, "test_end_loss_mrc": test_end_loss}, step=global_step)
+                wandb.log({"test_acc": test_acc, "test_loss": test_total_loss, "test_link_loss": test_link_loss, "test_pos_link_loss": test_pos_link_loss, "test_neg_link_loss": test_neg_link_loss, "test_end_loss": test_end_loss, "test_mlm_loss": test_mlm_loss, "final_test_acc": final_test_acc}, step=global_step)
+                if args.mrc_task:
+                    wandb.log({"test_acc_mrc": test_acc_mrc, "test_end_loss_mrc": test_end_loss}, step=global_step)
                 if args.use_codalab:
                     with open("stats.json", 'w') as fout:
                         json.dump({'epoch': epoch_id, 'step': global_step, 'dev_acc': dev_acc, 'test_acc': test_acc}, fout, indent=2)
@@ -810,7 +799,7 @@ if __name__ == '__main__':
     parser.add_argument('--end_task', type=float, default=1.0, help='Task weight for the end task (MCQA)')
     parser.add_argument('--mlm_task', type=float, default=0.0, help='Task weight for the MLM task')
     parser.add_argument('--link_task', type=float, default=0.0, help='Task weight for the LinkPred task')
-    parser.add_argument('--mrc_task', type=float, default=0.0, help='Task weight for the MRC task')
+    parser.add_argument('--mrc_task', type=float, default=1.0, help='Task weight for the MRC task')
 
     parser.add_argument('--mlm_probability', type=float, default=0.15, help='')
     parser.add_argument('--span_mask', type=utils.bool_flag, default=False, help='')
