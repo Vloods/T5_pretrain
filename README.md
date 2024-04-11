@@ -40,7 +40,7 @@ Download pretrained models and place files under `./models`
 
 Download all the preprocessed data from **here** (link will be updated).
 
-## 2. How to train
+## 3. How to train
 
 If you would like to train model on single task, run: 
 ```
