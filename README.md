@@ -12,7 +12,7 @@ This repo provides the source code & data of our paper "Multitask Finetuning on 
 ## 0. Dependencies
 Installation guide for training Roberta/T5 with H/A 100  
 
-Reqs: python3.8, cuda11.8, torch2.0.1, pyg2.4, transformers4.10
+Requirements: python3.8, cuda11.8, torch2.0.1, pyg2.4, transformers4.10
 
 Run the following commands to create a conda environment:
 
@@ -35,6 +35,10 @@ Download pretrained models and place files under `./models`
 | T5-base | 220M parameters | BookCorpus (filtered) | ConceptNet | link (will be updated) |
 | RoBERTa | 360M parameters | BookCorpus (filtered) | ConceptNet | link (will be updated) |
 
+
+## 2. Download data
+
+Download all the preprocessed data from **here** (link will be updated).
 
 ## 2. How to train
 
