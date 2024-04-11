@@ -35,6 +35,25 @@ Download pretrained models and place files under `./models`
 | T5-base | 220M parameters | BookCorpus (filtered) | ConceptNet | link (will be updated) |
 | RoBERTa | 360M parameters | BookCorpus (filtered) | ConceptNet | link (will be updated) |
 
+
+## 2. How to train
+
+If you would like to train model on single task, run: 
+```
+scripts/run_train__{qa/mrc/kgqa_dataset_name}.sh
+```
+
+For joint training, run (don't forget to specify the task flags):
+```
+scripts/run_train__joint.sh
+```
+
+**(Optional)** To pretrain model on your own data, you can run:
+```
+scripts/run_pretrain.sh
+scripts/T5_run_pretrain.sh
+```
+
 ## Acknowledgment
 This repo is built upon the following works:
 ```
