@@ -347,7 +347,7 @@ class LMGNN(PreTrainedModelClass):
             link_loss = pos_link_loss = neg_link_loss = 0.
 
         # Concatenated pool
-        if self.args.end_task and t_type=0:
+        if self.args.end_task and t_type==0:
             sent_vecs_for_pooler = sent_vecs
             if self.k >= 0:
                 graph_vecs, pool_attn = self.pooler(sent_vecs_for_pooler, gnn_output, node_mask) #graph_vecs: [bs, node_dim]
@@ -358,7 +358,7 @@ class LMGNN(PreTrainedModelClass):
         else:
             logits = None
             
-        if self.args.mrc_task and t_type=1:
+        if self.args.mrc_task and t_type==1:
             sent_vecs_for_pooler = sent_vecs
             if self.k >= 0:
                 graph_vecs, pool_attn = self.pooler(sent_vecs_for_pooler, gnn_output, node_mask) #graph_vecs: [bs, node_dim]
