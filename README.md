@@ -4,7 +4,7 @@ This repo provides the source code & data of our paper "Multitask Finetuning on 
 
 
 <p align="center">
-  <img src="./figs/dragon_ft.png" width="500" title="DRAGON finetune overview" alt="">
+  <img src="./figs/model_arch.png" width="500" title="DRAGON finetune overview" alt="">
 </p>
 
 
