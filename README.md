@@ -9,7 +9,7 @@ This repo provides the source code & data of our paper "Multitask Finetuning on 
 
 
 
-## Dependencies
+## 0. Dependencies
 
 Run the following commands to create a conda environment:
 ```bash
@@ -21,6 +21,15 @@ python -m spacy download en
 pip install scispacy==0.3.0
 pip install torch-scatter==2.0.9 torch-sparse==0.6.12 torch-geometric==2.0.0 -f https://pytorch-geometric.com/whl/torch-1.10.1+cu113.html
 ```
+
+## 1. Download pretrained models
+
+Download pretrained models and place files under `./models`
+
+| Model  | Size | Pretraining Text | Pretraining Knowledge Graph | Download Link |
+| ------------- | ------------- | --------- | ---- | ---- | ---- |
+| T5-base | 220M parameters | BookCorpus (filtered) | ConceptNet | link (will be updated) |
+| RoBERTa | 360M parameters | BookCorpus (filtered) | ConceptNet | link (will be updated) |
 
 ## Acknowledgment
 This repo is built upon the following works:
