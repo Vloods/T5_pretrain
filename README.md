@@ -9,7 +9,7 @@ This repo provides the source code & data of our paper "Multitask Finetuning on 
 
 
 
-## 0. Dependencies
+## Dependencies
 
 Run the following commands to create a conda environment:
 ```bash
