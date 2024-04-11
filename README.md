@@ -27,7 +27,7 @@ pip install torch-scatter==2.0.9 torch-sparse==0.6.12 torch-geometric==2.0.0 -f 
 Download pretrained models and place files under `./models`
 
 | Model  | Size | Pretraining Text | Pretraining Knowledge Graph | Download Link |
-| ------------- | ------------- | --------- | ---- | ---- | ---- |
+| ------------- | --------- | ---- | ---- | ---- |
 | T5-base | 220M parameters | BookCorpus (filtered) | ConceptNet | link (will be updated) |
 | RoBERTa | 360M parameters | BookCorpus (filtered) | ConceptNet | link (will be updated) |
 
