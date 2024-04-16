@@ -1,6 +1,6 @@
 # Multitask Finetuning on Pretrained KG-enchanced LLM for Question Answering and Machine Reading Comprehension Tasks
 
-This repo provides the source code & data of our paper "Multitask Finetuning on Pretrained KG-enchanced LLM for Question Answering and Machine Reading Comprehension Tasks".
+This repo provides the **source code & data** of our paper "Multitask Finetuning on Pretrained KG-enchanced LLM for Question Answering and Machine Reading Comprehension Tasks".
 
 
 <p align="center">
@@ -10,9 +10,9 @@ This repo provides the source code & data of our paper "Multitask Finetuning on 
 
 
 ## 0. Dependencies
-Installation guide for training Roberta/T5 with H/A 100  
+Installation guide for training **Roberta/T5** with H/A 100  
 
-Requirements: python3.8, cuda11.8, torch2.0.1, pyg2.4, transformers4.10
+**Requirements:** python3.8, cuda11.8, torch2.0.1, pyg2.4, transformers4.10
 
 Run the following commands to create a conda environment:
 
