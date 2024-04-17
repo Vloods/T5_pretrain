@@ -1,4 +1,4 @@
-# Multitask Finetuning on Pretrained KG-enchanced LLM for Question Answering and Machine Reading Comprehension Tasks
+# Joint Multitask Finetuning on Pretrained KG-enhanced LLM for Downstream Tasks
 
 This repo provides the **source code & data** of our paper "Multitask Finetuning on Pretrained KG-enchanced LLM for Question Answering and Machine Reading Comprehension Tasks".
 
