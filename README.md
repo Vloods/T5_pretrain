@@ -38,7 +38,7 @@ Download pretrained models and place files under `./models`
 
 ## 2. Download data
 
-Download all the preprocessed data from **here** (link will be updated).
+Download all the preprocessed data from [here](https://sc.link/Vke9N).
 
 ## 3. How to train
 
