@@ -21,6 +21,7 @@ def add_data_arguments(parser):
     parser.add_argument('--kg_vocab_path', default="", help='kg vocab file')
     # dataset specific
     parser.add_argument('-ds', '--dataset', default='csqa', help='dataset name')
+    parser.add_argument('-dsmrc', '--dataset_mrc', default='dream', help='dataset name')
     parser.add_argument('--data_dir', default='data', type=str, help='Path to the data directory')
     parser.add_argument('-ih', '--inhouse', type=utils.bool_flag, nargs='?', const=True, help='run in-house setting')
     parser.add_argument('--inhouse_train_qids', default='data/{dataset}/inhouse_split_qids.txt', help='qids of the in-house training set')
@@ -28,6 +29,10 @@ def add_data_arguments(parser):
     parser.add_argument('--train_statements', default='{data_dir}/{dataset}/statement/train.statement.jsonl')
     parser.add_argument('--dev_statements', default='{data_dir}/{dataset}/statement/dev.statement.jsonl')
     parser.add_argument('--test_statements', default='{data_dir}/{dataset}/statement/test.statement.jsonl')
+
+    parser.add_argument('--train_statements_mrc', default='{data_dir}/{dataset_mrc}/statement/train.statement.jsonl')
+    parser.add_argument('--dev_statements_mrc', default='{data_dir}/{dataset_mrc}/statement/dev.statement.jsonl')
+    parser.add_argument('--test_statements_mrc', default='{data_dir}/{dataset_mrc}/statement/test.statement.jsonl')
     # preprocessing options
     parser.add_argument('-sl', '--max_seq_len', default=100, type=int)
     # set dataset defaults
