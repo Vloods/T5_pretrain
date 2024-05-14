@@ -61,7 +61,6 @@ def load_data(args, devices, kg):
                 is_inhouse=args.inhouse, inhouse_train_qids_path=args.inhouse_train_qids,
                 subsample=args.subsample, n_train=args.n_train, debug=args.debug, cxt_node_connects_all=args.cxt_node_connects_all, kg=kg)
  
-            print("!!!!!!!!!!", len(args.train_adj))
             dataset_mrc = data_utils.DRAGON_DataLoader(args, args.train_statements_mrc, args.train_adj_mrc,
                 args.dev_statements_mrc, args.dev_adj_mrc,
                 args.test_statements_mrc, args.test_adj_mrc,
@@ -74,7 +73,6 @@ def load_data(args, devices, kg):
             if args.local_rank == p_rank: #End of barrier
                 torch.distributed.barrier()
     else:
-        print("!!!!!!!!!!", len(args.train_adj))
         dataset = data_utils.DRAGON_DataLoader(args, args.train_statements, args.train_adj,
             args.dev_statements, args.dev_adj,
             args.test_statements, args.test_adj,
@@ -189,15 +187,12 @@ def calc_loss_and_acc(logits, labels, loss_type, loss_func):
         bs = labels.size(0)
         loss *= bs
         n_corrects = (logits.argmax(1) == labels).sum().item()
-        print(logits)
-        print(logits.argmax(1))
-        print(labels)
         output = torch.nn.functional.relu(labels)
         
     return loss, n_corrects
 
 
-def calc_eval_accuracy(args, eval_set, model, loss_type, loss_func, debug, save_test_preds, preds_path):
+def calc_eval_accuracy(args, eval_set, model, loss_type, loss_func, debug, save_test_preds, preds_path, t_type=0):
     """Eval on the dev or test set - calculate loss and accuracy"""
     total_loss_acm = end_loss_acm = mlm_loss_acm = 0.0
     link_loss_acm = pos_link_loss_acm = neg_link_loss_acm = 0.0
@@ -210,7 +205,7 @@ def calc_eval_accuracy(args, eval_set, model, loss_type, loss_func, debug, save_
     with torch.no_grad():
         for qids, labels, *input_data in tqdm(eval_set, desc="Dev/Test batch"):
             bs = labels.size(0)
-            logits, mlm_loss, link_losses = model(*input_data)
+            logits, mlm_loss, link_losses = model(*input_data, t_type=t_type)
             end_loss, n_corrects = calc_loss_and_acc(logits, labels, loss_type, loss_func)
             link_loss, pos_link_loss, neg_link_loss = link_losses
             loss = args.end_task * end_loss + args.mlm_task * mlm_loss + args.link_task * link_loss
@@ -264,11 +259,7 @@ def train(args, resume, has_test_split, devices, kg):
     model_path = os.path.join(args.save_dir, 'model.pt')
 
     dataset, dataset_mrc = load_data(args, devices, kg)
-    print("!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-    print(dataset_mrc.train_size())
-    print(dataset.train_size())
-    print(dataset_mrc.batch_size)
-    print(dataset.batch_size)
+
     dev_dataloader = dataset.dev()
     dev_dataloader_mrc = dataset_mrc.dev()
     print("has_test_split", has_test_split)
@@ -426,7 +417,6 @@ def train(args, resume, has_test_split, devices, kg):
         trloader_mrc = dataset_mrc.train(steps=args.redef_epoch_steps, local_rank=args.local_rank)
         trloader_mrc_it = iter(trloader_mrc)
         #
-        print("!!!!")
         j= -1
         for i, (qids, labels, *input_data) in tqdm(enumerate(trloader), desc="Batch", disable=args.local_rank not in [-1, 0],total=len(trloader)): #train_dataloader
             try:
@@ -451,7 +441,7 @@ def train(args, resume, has_test_split, devices, kg):
                         cntr = 0
                         #try:
                         if input_data[0][a:b].size()[0] == 0 or input_data_mrc[0][a:b].size()[0] == 0:
-                            print(input_data[0][a:b].size()[0], input_data_mrc[0][a:b].size()[0])
+                            print("err: ", input_data[0][a:b].size()[0], input_data_mrc[0][a:b].size()[0])
                             break
                         logits, mlm_loss, link_losses = model(*[x[a:b] for x in input_data], t_type=0) # logits: [bs, nc]
                         end_loss, n_corrects = calc_loss_and_acc(logits, labels[a:b], args.loss, loss_func)
@@ -459,8 +449,6 @@ def train(args, resume, has_test_split, devices, kg):
                         if args.mrc_task:
                             logits_mrc, mlm_loss_mrc, link_losses_mrc = model(*[x[a:b] for x in input_data_mrc], t_type=1) # logits: [bs, nc]
                             end_loss_mrc, n_corrects_mrc = calc_loss_and_acc(logits_mrc, labels_mrc[a:b], args.loss, loss_func)
-
-
                 else:
                     logits, mlm_loss, link_losses = model(*[x[a:b] for x in input_data]) # logits: [bs, nc]
                     end_loss, n_corrects = calc_loss_and_acc(logits, labels[a:b], args.loss, loss_func)
@@ -536,8 +524,8 @@ def train(args, resume, has_test_split, devices, kg):
         if args.local_rank in [-1, 0]:
             model.eval()
             preds_path = os.path.join(args.save_dir, 'dev_e{}_preds.csv'.format(epoch_id))
-            dev_total_loss, dev_end_loss, dev_mlm_loss, dev_link_loss, dev_pos_link_loss, dev_neg_link_loss, dev_acc = calc_eval_accuracy(args, dev_dataloader, model, args.loss, loss_func, args.debug, not args.debug, preds_path)
-            dev_total_loss_mrc, dev_end_loss_mrc, dev_mlm_loss_mrc, dev_link_loss_mrc, dev_pos_link_loss_mrc, dev_neg_link_loss_mrc, dev_acc_mrc = calc_eval_accuracy(args, dev_dataloader_mrc, model, args.loss, loss_func, args.debug, not args.debug, preds_path)
+            dev_total_loss, dev_end_loss, dev_mlm_loss, dev_link_loss, dev_pos_link_loss, dev_neg_link_loss, dev_acc = calc_eval_accuracy(args, dev_dataloader, model, args.loss, loss_func, args.debug, not args.debug, preds_path, t_type=0)
+            dev_total_loss_mrc, dev_end_loss_mrc, dev_mlm_loss_mrc, dev_link_loss_mrc, dev_pos_link_loss_mrc, dev_neg_link_loss_mrc, dev_acc_mrc = calc_eval_accuracy(args, dev_dataloader_mrc, model, args.loss, loss_func, args.debug, not args.debug, preds_path, t_type=1)
             print ('dev_acc', dev_acc)
             if args.end_task and (args.mlm_task or args.link_task):
                 dev_dataloader.set_eval_end_task_mode(True)
