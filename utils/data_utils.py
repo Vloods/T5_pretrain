@@ -569,7 +569,7 @@ class DRAGON_DataLoader(object):
             tokenizer_class = {'bert': BertTokenizer, 'xlnet': XLNetTokenizer, 'roberta': RobertaTokenizer}.get(self.model_type)
 
 
-        tokenizer = tokenizer_class.from_pretrained("./t5_token")
+        tokenizer = tokenizer_class.from_pretrained(self.model_name)
         # tokenizer.save_pretrained("t5_token.json")
         
         self.tokenizer = tokenizer

@@ -44,6 +44,8 @@ def add_data_arguments(parser):
         for attribute in ('statements',):
             attr_name = f'{split}_{attribute}'
             parser.set_defaults(**{attr_name: getattr(args, attr_name).format(dataset=args.dataset, data_dir=args.data_dir)})
+            attr_name = f'{split}_{attribute}_mrc'
+            parser.set_defaults(**{attr_name: getattr(args, attr_name).format(dataset_mrc=args.dataset_mrc, data_dir=args.data_dir)})
     if 'test' not in data_splits:
         parser.set_defaults(test_statements=None)
 

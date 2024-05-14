@@ -7,7 +7,7 @@ dt=`date '+%Y%m%d_%H%M%S'`
 
 
 dataset="obqa"
-dataset_mrc="arcqa"
+dataset_mrc="csqa"
 shift
 encoder='roberta-large'
 args=$@
@@ -66,14 +66,14 @@ save_dir_pref='runs'
 mkdir -p $save_dir_pref
 mkdir -p logs
 
-run_name=dragon__${dataset}_ih_${inhouse}_load__elr${elr}_dlr${dlr}_W${warmup_steps}_b${bs}_ufz${unfreeze_epoch}_e${n_epochs}_sd${seed}__${dt}
+run_name=dragon__${dataset}_${dataset_mrc}_ih_${inhouse}_load__elr${elr}_dlr${dlr}_W${warmup_steps}_b${bs}_ufz${unfreeze_epoch}_e${n_epochs}_sd${seed}__${dt}
 log=logs/train__${run_name}.log.txt
 
 ###### Training ######
-python3 -u dragon.py \
+python3 -u dragon_joint.py \
     --dataset $dataset --dataset_mrc $dataset_mrc\
     --encoder $encoder -k $k --gnn_dim $gnndim -elr $elr -dlr $dlr -bs $bs --seed $seed -mbs ${mbs} --unfreeze_epoch ${unfreeze_epoch} --encoder_layer=${encoder_layer} -sl ${max_seq_len} --max_node_num ${max_node_num} \
-    --n_epochs $n_epochs --max_epochs_before_stop ${max_epochs_before_stop} --fp16 $fp16 --upcast $upcast --use_wandb true \
+    --n_epochs $n_epochs --max_epochs_before_stop ${max_epochs_before_stop} --fp16 $fp16 --upcast $upcast --use_wandb false \
     --save_dir ${save_dir_pref}/${dataset}/${run_name} --save_model 1 \
     --run_name ${run_name} \
     --load_model_path $load_model_path \
