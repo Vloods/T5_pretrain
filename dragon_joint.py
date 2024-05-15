@@ -206,7 +206,6 @@ def calc_eval_accuracy(args, eval_set, model, loss_type, loss_func, debug, save_
         for qids, labels, *input_data in tqdm(eval_set, desc="Dev/Test batch"):
             bs = labels.size(0)
             logits, mlm_loss, link_losses = model(*input_data, t_type=t_type)
-            print("deb: ", logits)
             end_loss, n_corrects = calc_loss_and_acc(logits, labels, loss_type, loss_func)
             link_loss, pos_link_loss, neg_link_loss = link_losses
             loss = args.end_task * end_loss + args.mlm_task * mlm_loss + args.link_task * link_loss
@@ -233,6 +232,50 @@ def calc_eval_accuracy(args, eval_set, model, loss_type, loss_func, debug, save_
         [item / n_samples_acm for item in (total_loss_acm, end_loss_acm, mlm_loss_acm, link_loss_acm, pos_link_loss_acm, neg_link_loss_acm, n_corrects_acm)]
     return total_loss_avg, end_loss_avg, mlm_loss_avg, link_loss_avg, pos_link_loss_avg, neg_link_loss_avg, n_corrects_avg
 
+
+def create_miterator(qa_dataloader, mrc_dataloader=None, kgqa_dataloader=None):
+    qa_d   = qa_dataloader
+    mrc_d  = mrc_dataloader
+    kgqa_d = kgqa_dataloder
+
+    sizes = []
+    if qa_d is not None:
+        sizes.append(len(qa_d))
+    if mrc_d is not None:
+        sizes.append(len(mrc_d))
+    if kgqa_d is not None:
+        sizes.append(kgqa_d.train_size)
+    max_size = max(sizes)
+    
+    def mtask_iter():
+        nonlocal qa_d, mrc_d, kgqa_d
+        qa_iter   = iter(qa_d)
+        mrc_iter  = iter(mrc_d)
+        for i in range(max_size):
+            if qa_d is not None:
+                try:
+                    qa_sample = next(qa_iter)
+                except StopIteration:
+                    qa_iter = iter(qa_d)
+                    qa_sample = next(qa_iter)
+                
+            if mrc_d is not None:
+                try:
+                    mrc_sample = next(mrc_iter)
+                except StopIteration:
+                    mrc_iter = iter(qa_d)
+                    mrc_sample = next(mrc_iter)
+                
+            if kgqa_d is not None:
+                try:
+                    kgqa_sample = next(kgqa_iter)
+                except StopIteration:
+                    kgqa_iter = iter(kgqa_d)
+                    kgqa_sample = next(kgqa_iter)
+                
+            yield qa_sample, mrc_sample #, kgqa_sample
+            
+    return mtask_iter
 
 def train(args, resume, has_test_split, devices, kg):
     print("args: {}".format(args))
@@ -393,6 +436,9 @@ def train(args, resume, has_test_split, devices, kg):
 
     print ('end_task', args.end_task, 'mlm_task', args.mlm_task, 'link_task', args.link_task)
 
+    trloader = None
+    trloader_mrc = None
+    
     total_loss_acm = end_loss_acm = mlm_loss_acm = end_loss_mrc_acm = 0.0
     link_loss_acm = pos_link_loss_acm = neg_link_loss_acm = 0.0
     n_samples_acm = n_corrects_acm = n_corrects_mrc_acm = 0
@@ -415,20 +461,22 @@ def train(args, resume, has_test_split, devices, kg):
         model.train()
         
         trloader = dataset.train(steps=args.redef_epoch_steps, local_rank=args.local_rank)
-        trloader_mrc = dataset_mrc.train(steps=args.redef_epoch_steps, local_rank=args.local_rank)
-        trloader_mrc_it = iter(trloader_mrc)
+        if args.mrc_task:
+            trloader_mrc = dataset_mrc.train(steps=args.redef_epoch_steps, local_rank=args.local_rank)
+        
+        loader = create_miterator(trloader, trloader_mrc)()
+        
+        sizes = []
+        if trloader is not None:
+            sizes.append(len(trloader))
+        if trloader_mrc is not None:
+            sizes.append(len(trloader_mrc))
         #
-        j= -1
-        for i, (qids, labels, *input_data) in tqdm(enumerate(trloader), desc="Batch", disable=args.local_rank not in [-1, 0],total=len(trloader)): #train_dataloader
-            try:
-                l2 = next(trloader_mrc_it)
-                j+=1
-            except StopIteration:
-                trloader_mrc_it = iter(trloader_mrc)
-                l2 = next(trloader_mrc_it)
-                j = 0
-
-            qids_mrc, labels_mrc, *input_data_mrc = l2
+        for i, (qa_data, mrc_data) in tqdm(enumerate(loader), desc="Batch", disable=args.local_rank not in [-1, 0],total=max(sizes)): #train_dataloader
+            qids, labels, *input_data = qa_data
+            
+            if args.mrc_task:
+                qids_mrc, labels_mrc, *input_data_mrc = mrc_data
             # labels: [bs]
             start_time = time.time()
             optimizer.zero_grad()
@@ -442,7 +490,6 @@ def train(args, resume, has_test_split, devices, kg):
                         cntr = 0
                         #try:
                         if input_data[0][a:b].size()[0] == 0 or input_data_mrc[0][a:b].size()[0] == 0:
-                            print("err: ", input_data[0][a:b].size()[0], input_data_mrc[0][a:b].size()[0])
                             break
                         logits, mlm_loss, link_losses = model(*[x[a:b] for x in input_data], t_type=0) # logits: [bs, nc]
                         end_loss, n_corrects = calc_loss_and_acc(logits, labels[a:b], args.loss, loss_func)
@@ -488,13 +535,15 @@ def train(args, resume, has_test_split, devices, kg):
                     nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
                 else:
                     nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
-            scheduler.step()
+            
             # Gradients are accumulated and not back-proped until a batch is processed (not a mini-batch).
             if args.fp16:
                 scaler.step(optimizer)
                 scaler.update()
             else:
                 optimizer.step()
+
+            scheduler.step()
 
             total_time += (time.time() - start_time)
 
