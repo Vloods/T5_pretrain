@@ -206,6 +206,7 @@ def calc_eval_accuracy(args, eval_set, model, loss_type, loss_func, debug, save_
         for qids, labels, *input_data in tqdm(eval_set, desc="Dev/Test batch"):
             bs = labels.size(0)
             logits, mlm_loss, link_losses = model(*input_data, t_type=t_type)
+            print("deb: ", logits)
             end_loss, n_corrects = calc_loss_and_acc(logits, labels, loss_type, loss_func)
             link_loss, pos_link_loss, neg_link_loss = link_losses
             loss = args.end_task * end_loss + args.mlm_task * mlm_loss + args.link_task * link_loss
@@ -445,7 +446,6 @@ def train(args, resume, has_test_split, devices, kg):
                             break
                         logits, mlm_loss, link_losses = model(*[x[a:b] for x in input_data], t_type=0) # logits: [bs, nc]
                         end_loss, n_corrects = calc_loss_and_acc(logits, labels[a:b], args.loss, loss_func)
-
                         if args.mrc_task:
                             logits_mrc, mlm_loss_mrc, link_losses_mrc = model(*[x[a:b] for x in input_data_mrc], t_type=1) # logits: [bs, nc]
                             end_loss_mrc, n_corrects_mrc = calc_loss_and_acc(logits_mrc, labels_mrc[a:b], args.loss, loss_func)

@@ -354,11 +354,8 @@ class LMGNN(PreTrainedModelClass):
                 concat_pool = torch.cat((graph_vecs, sent_vecs, Z_vecs), 1)
             else:
                 concat_pool = sent_vecs
-            logits = self.fc(self.dropout_fc(concat_pool)) #[bs, 1]
-        else:
-            logits = None
-            
-        if self.args.mrc_task and t_type==1:
+            logits = self.fc(self.dropout_fc(concat_pool)) #[bs, 1]  
+        elif self.args.mrc_task and t_type==1:
             sent_vecs_for_pooler = sent_vecs
             if self.k >= 0:
                 graph_vecs, pool_attn = self.pooler(sent_vecs_for_pooler, gnn_output, node_mask) #graph_vecs: [bs, node_dim]
