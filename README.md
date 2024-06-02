@@ -38,7 +38,7 @@ Download pretrained models and place files under `./models`
 
 ## 2. Download data
 
-Download all the preprocessed data from [here](https://sc.link/Vke9N) (~596 GB).
+Download all the preprocessed data from [here](https://sc.link/Vke9N) (~596 GB), kgqa data [here](https://sc.link/tfeLW) (~2 GB).
 
 ## 3. How to train
 
