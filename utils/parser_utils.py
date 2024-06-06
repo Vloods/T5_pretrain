@@ -18,10 +18,12 @@ DATASET_NO_TEST = ['bookcorpus']
 def add_data_arguments(parser):
     # arguments that all datasets share
     parser.add_argument('--ent_emb_paths', default=['tzw'], nargs='+', help='sources for entity embeddings')
+    parser.add_argument('--ent_emb_paths_kgqa', nargs='+', help='sources for entity embeddings')
     parser.add_argument('--kg_vocab_path', default="", help='kg vocab file')
     # dataset specific
     parser.add_argument('-ds', '--dataset', default='csqa', help='dataset name')
     parser.add_argument('-dsmrc', '--dataset_mrc', default='dream', help='dataset name')
+    parser.add_argument('-dskgqa', '--dataset_kgqa', default='kqa_pro')
     parser.add_argument('--data_dir', default='data', type=str, help='Path to the data directory')
     parser.add_argument('-ih', '--inhouse', type=utils.bool_flag, nargs='?', const=True, help='run in-house setting')
     parser.add_argument('--inhouse_train_qids', default='data/{dataset}/inhouse_split_qids.txt', help='qids of the in-house training set')
@@ -33,6 +35,10 @@ def add_data_arguments(parser):
     parser.add_argument('--train_statements_mrc', default='{data_dir}/{dataset_mrc}/statement/train.statement.jsonl')
     parser.add_argument('--dev_statements_mrc', default='{data_dir}/{dataset_mrc}/statement/dev.statement.jsonl')
     parser.add_argument('--test_statements_mrc', default='{data_dir}/{dataset_mrc}/statement/test.statement.jsonl')
+
+    parser.add_argument('--train_statements_kgqa', default='{data_dir}/{dataset_kgqa}/statement/train.statement.jsonl')
+    parser.add_argument('--dev_statements_kgqa', default='{data_dir}/{dataset_kgqa}/statement/dev.statement.jsonl')
+    parser.add_argument('--test_statements_kgqa', default='{data_dir}/{dataset_kgqa}/statement/test.statement.jsonl')
     # preprocessing options
     parser.add_argument('-sl', '--max_seq_len', default=100, type=int)
     # set dataset defaults
@@ -46,6 +52,8 @@ def add_data_arguments(parser):
             parser.set_defaults(**{attr_name: getattr(args, attr_name).format(dataset=args.dataset, data_dir=args.data_dir)})
             attr_name = f'{split}_{attribute}_mrc'
             parser.set_defaults(**{attr_name: getattr(args, attr_name).format(dataset_mrc=args.dataset_mrc, data_dir=args.data_dir)})
+            attr_name = f'{split}_{attribute}_kgqa'
+            parser.set_defaults(**{attr_name: getattr(args, attr_name).format(dataset_kgqa=args.dataset_kgqa, data_dir=args.data_dir)})
     if 'test' not in data_splits:
         parser.set_defaults(test_statements=None)
 
@@ -64,6 +72,8 @@ def add_optimization_arguments(parser):
     parser.add_argument('--optim', default='radam', choices=['sgd', 'adam', 'adamw', 'radam'], help='learning rate scheduler')
     parser.add_argument('--lr_schedule', default='fixed', choices=['fixed', 'warmup_linear', 'warmup_constant'], help='learning rate scheduler')
     parser.add_argument('-bs', '--batch_size', default=32, type=int)
+    parser.add_argument('-bsm', '--batch_size_mrc', default=32, type=int)
+    parser.add_argument('-bsk', '--batch_size_kgqa', default=32, type=int)
     parser.add_argument('--warmup_steps', type=float, default=150)
     parser.add_argument('--max_grad_norm', default=1.0, type=float, help='max grad norm (0 to disable)')
     parser.add_argument('--weight_decay', default=1e-2, type=float, help='l2 weight decay strength')

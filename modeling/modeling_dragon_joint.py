@@ -41,13 +41,13 @@ class DRAGON(nn.Module):
                  n_concept=799273, concept_dim=200, concept_in_dim=1024, n_attention_head=2,
                  fc_dim=200, n_fc_layer=0, p_emb=0.2, p_gnn=0.2, p_fc=0.2,
                  pretrained_concept_emb=None, freeze_ent_emb=True,
-                 init_range=0.02, ie_dim=200, info_exchange=True, ie_layer_num=1, sep_ie_layers=False, layer_id=-1):
+                 init_range=0.02, ie_dim=200, info_exchange=True, ie_layer_num=1, sep_ie_layers=False, layer_id=-1, pretrained_concept_emb_kgqa=None,n_concept_kgqa=123, concept_in_dim_kgqa=1024):
         super().__init__()
 
         self.n_ntype = n_ntype
         self.n_etype = n_etype
 
-        self.lmgnn, self.loading_info = LMGNN.from_pretrained(model_name, output_hidden_states=True, output_loading_info=True, args=args, model_name=model_name, k=k, n_ntype=n_ntype, n_etype=n_etype, n_concept=n_concept, concept_dim=concept_dim, concept_in_dim=concept_in_dim, n_attention_head=n_attention_head, fc_dim=fc_dim, n_fc_layer=n_fc_layer, p_emb=p_emb, p_gnn=p_gnn, p_fc=p_fc, pretrained_concept_emb=pretrained_concept_emb, freeze_ent_emb=freeze_ent_emb, init_range=init_range, ie_dim=ie_dim, info_exchange=info_exchange, ie_layer_num=ie_layer_num,  sep_ie_layers=sep_ie_layers, layer_id=layer_id)
+        self.lmgnn, self.loading_info = LMGNN.from_pretrained(model_name, output_hidden_states=True, output_loading_info=True, args=args, model_name=model_name, k=k, n_ntype=n_ntype, n_etype=n_etype, n_concept=n_concept, concept_dim=concept_dim, concept_in_dim=concept_in_dim, n_attention_head=n_attention_head, fc_dim=fc_dim, n_fc_layer=n_fc_layer, p_emb=p_emb, p_gnn=p_gnn, p_fc=p_fc, pretrained_concept_emb=pretrained_concept_emb, freeze_ent_emb=freeze_ent_emb, init_range=init_range, ie_dim=ie_dim, info_exchange=info_exchange, ie_layer_num=ie_layer_num,  sep_ie_layers=sep_ie_layers, layer_id=layer_id, pretrained_concept_emb_kgqa=pretrained_concept_emb_kgqa, n_concept_kgqa=n_concept_kgqa, concept_in_dim_kgqa=concept_in_dim_kgqa)
 
     def batch_graph(self, edge_index_init, edge_type_init, pos_triples_init, neg_nodes_init, n_nodes):
         """
@@ -171,7 +171,7 @@ class LMGNN(PreTrainedModelClass):
                  n_concept=799273, concept_dim=200, concept_in_dim=1024, n_attention_head=2,
                  fc_dim=200, n_fc_layer=0, p_emb=0.2, p_gnn=0.2, p_fc=0.2,
                  pretrained_concept_emb=None, freeze_ent_emb=True,
-                 init_range=0.02, ie_dim=200, info_exchange=True, ie_layer_num=1, sep_ie_layers=False, layer_id=-1):
+                 init_range=0.02, ie_dim=200, info_exchange=True, ie_layer_num=1, sep_ie_layers=False, layer_id=-1, pretrained_concept_emb_kgqa=None, n_concept_kgqa=123, concept_in_dim_kgqa=1024):
         super().__init__(config)
         self.args = args
         self.config = config
@@ -183,7 +183,7 @@ class LMGNN(PreTrainedModelClass):
         self.n_attention_head = n_attention_head
         self.activation = layers.GELU()
         if k >= 0:
-            self.concept_emb = layers.CustomizedEmbedding(concept_num=n_concept, concept_out_dim=concept_dim, use_contextualized=False, concept_in_dim=concept_in_dim, pretrained_concept_emb=pretrained_concept_emb, freeze_ent_emb=freeze_ent_emb)
+            self.concept_emb = layers.CustomizedEmbedding(concept_num=n_concept, concept_out_dim=concept_dim, use_contextualized=False, concept_in_dim=concept_in_dim, pretrained_concept_emb=pretrained_concept_emb, freeze_ent_emb=freeze_ent_emb, pretrained_concept_emb_kgqa=pretrained_concept_emb_kgqa, n_concept_kgqa=n_concept_kgqa, concept_in_dim_kgqa=concept_in_dim_kgqa)
             self.pooler = layers.MultiheadAttPoolLayer(n_attention_head, config.hidden_size, concept_dim)
 
         concat_vec_dim = concept_dim * 2 + config.hidden_size if k>=0 else config.hidden_size
@@ -192,7 +192,11 @@ class LMGNN(PreTrainedModelClass):
         self.dropout_e = nn.Dropout(p_emb)
         self.dropout_fc = nn.Dropout(p_fc)
         
-        self.fc_mrc = layers.MLP(concat_vec_dim, fc_dim, 1, n_fc_layer, p_fc, layer_norm=True)
+        if self.args.mrc_task:
+            self.fc_mrc = layers.MLP(concat_vec_dim, fc_dim, 1, n_fc_layer, p_fc, layer_norm=True)
+
+        if self.args.kgqa_task:
+            self.fc_kgqa = layers.MLP(concat_vec_dim, fc_dim, 1, n_fc_layer, p_fc, layer_norm=True)
 
         if init_range > 0:
             self.apply(self._init_weights)
@@ -208,6 +212,7 @@ class LMGNN(PreTrainedModelClass):
 
         self.layer_id = layer_id
         self.cpnet_vocab_size = n_concept
+        self.cpnet_vocab_size_kgqa = n_concept_kgqa
 
         if args.link_task:
             if args.link_decoder == 'DistMult':
@@ -251,9 +256,12 @@ class LMGNN(PreTrainedModelClass):
             input_ids = lm_input_ids
 
         # GNN inputs
-        concept_ids[concept_ids == 0] = self.cpnet_vocab_size + 2
+        if t_type == 2:
+            concept_ids[concept_ids == 0] = self.cpnet_vocab_size_kgqa + 2
+        else:
+            concept_ids[concept_ids == 0] = self.cpnet_vocab_size + 2
         if self.k >= 0:
-            gnn_input = self.concept_emb(concept_ids - 1, emb_data).to(node_type_ids.device)
+            gnn_input = self.concept_emb(concept_ids - 1, emb_data, t_type).to(node_type_ids.device)
         else:
             gnn_input = torch.zeros((concept_ids.size(0), concept_ids.size(1), self.concept_dim)).float().to(node_type_ids.device)
         gnn_input[:, 0] = 0
@@ -363,6 +371,14 @@ class LMGNN(PreTrainedModelClass):
             else:
                 concat_pool = sent_vecs
             logits = self.fc_mrc(self.dropout_fc(concat_pool)) #[bs, 1]
+        elif self.args.kgqa_task and t_type==2:
+            sent_vecs_for_pooler = sent_vecs
+            if self.k >= 0:
+                graph_vecs, pool_attn = self.pooler(sent_vecs_for_pooler, gnn_output, node_mask) #graph_vecs: [bs, node_dim]
+                concat_pool = torch.cat((graph_vecs, sent_vecs, Z_vecs), 1)
+            else:
+                concat_pool = sent_vecs
+            logits = self.fc_kgqa(self.dropout_fc(concat_pool)) #[bs, 1]
         else:
             logits = None
 

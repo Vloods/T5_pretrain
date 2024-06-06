@@ -598,7 +598,7 @@ class MatrixAttention(nn.Module):
 
 class CustomizedEmbedding(nn.Module):
     def __init__(self, concept_num, concept_in_dim, concept_out_dim, use_contextualized=False,
-                 pretrained_concept_emb=None, freeze_ent_emb=True, scale=1.0, init_range=0.02):
+                 pretrained_concept_emb=None, freeze_ent_emb=True, scale=1.0, init_range=0.02, pretrained_concept_emb_kgqa=None, n_concept_kgqa=1, concept_in_dim_kgqa=1):
         super().__init__()
         self.scale = scale
         self.use_contextualized = use_contextualized
@@ -609,14 +609,25 @@ class CustomizedEmbedding(nn.Module):
                 self.emb.weight.data[:concept_num].copy_(pretrained_concept_emb)
             else:
                 self.emb.weight.data.normal_(mean=0.0, std=init_range)
+            self.emb_kgqa = nn.Embedding(n_concept_kgqa + 2, concept_in_dim_kgqa)
+            if pretrained_concept_emb_kgqa is not None:
+                self.emb_kgqa.weight.data.fill_(0)
+                self.emb_kgqa.weight.data[:n_concept_kgqa].copy_(pretrained_concept_emb_kgqa)
+            else:
+                self.emb_kgqa.weight.data.normal_(mean=0.0, std=init_range)
             if freeze_ent_emb:
                 freeze_net(self.emb)
+                freeze_net(self.emb_kgqa)
 
         if concept_in_dim != concept_out_dim:
             self.cpt_transform = nn.Linear(concept_in_dim, concept_out_dim)
             self.activation = GELU()
 
-    def forward(self, index, contextualized_emb=None):
+        if concept_in_dim_kgqa != concept_out_dim:
+            self.cpt_transform_kgqa = nn.Linear(concept_in_dim_kgqa, concept_out_dim)
+            self.activation_kgqa = GELU()
+
+    def forward(self, index, contextualized_emb=None, t_type=0):
         """
         index: size (bz, a)
         contextualized_emb: size (bz, b, emb_size) (optional)
@@ -630,10 +641,16 @@ class CustomizedEmbedding(nn.Module):
             emb_dim = contextualized_emb.size(-1)
             return contextualized_emb.gather(1, index.unsqueeze(-1).expand(-1, -1, emb_dim))
         else:
-            if hasattr(self, 'cpt_transform'):
-                return self.activation(self.cpt_transform(self.emb(index) * self.scale))
+            if t_type == 2:
+                if hasattr(self, 'cpt_transform'):
+                    return self.activation_kgqa(self.cpt_transform_kgqa(self.emb(index) * self.scale))
+                else:
+                    return self.emb(index) * self.scale
             else:
-                return self.emb(index) * self.scale
+                if hasattr(self, 'cpt_transform'):
+                    return self.activation(self.cpt_transform(self.emb(index) * self.scale))
+                else:
+                    return self.emb(index) * self.scale
 
 
 class T5AvgPooler(nn.Module):

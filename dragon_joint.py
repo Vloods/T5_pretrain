@@ -41,7 +41,8 @@ def load_data(args, devices, kg):
     torch.manual_seed(_seed)
     if torch.cuda.is_available() and args.cuda:
         torch.cuda.manual_seed(_seed)
-
+    dataset_mrc = None
+    dataset_kgqa = None
     #########################################################
     # Construct the dataset
     #########################################################
@@ -60,16 +61,26 @@ def load_data(args, devices, kg):
                 max_node_num=args.max_node_num, max_seq_length=args.max_seq_len,
                 is_inhouse=args.inhouse, inhouse_train_qids_path=args.inhouse_train_qids,
                 subsample=args.subsample, n_train=args.n_train, debug=args.debug, cxt_node_connects_all=args.cxt_node_connects_all, kg=kg)
- 
-            dataset_mrc = data_utils.DRAGON_DataLoader(args, args.train_statements_mrc, args.train_adj_mrc,
-                args.dev_statements_mrc, args.dev_adj_mrc,
-                args.test_statements_mrc, args.test_adj_mrc,
-                batch_size=args.batch_size, eval_batch_size=args.eval_batch_size,
-                device=devices,
-                model_name=args.encoder,
-                max_node_num=args.max_node_num, max_seq_length=args.max_seq_len,
-                is_inhouse=False, inhouse_train_qids_path=args.inhouse_train_qids,
-                subsample=args.subsample, n_train=args.n_train, debug=args.debug, cxt_node_connects_all=args.cxt_node_connects_all, kg=kg)
+            if args.mrc_task:
+                dataset_mrc = data_utils.DRAGON_DataLoader(args, args.train_statements_mrc, args.train_adj_mrc,
+                    args.dev_statements_mrc, args.dev_adj_mrc,
+                    args.test_statements_mrc, args.test_adj_mrc,
+                    batch_size=args.batch_size_mrc, eval_batch_size=args.eval_batch_size,
+                    device=devices,
+                    model_name=args.encoder,
+                    max_node_num=args.max_node_num, max_seq_length=args.max_seq_len,
+                    is_inhouse=False, inhouse_train_qids_path=args.inhouse_train_qids,
+                    subsample=args.subsample, n_train=args.n_train, debug=args.debug, cxt_node_connects_all=args.cxt_node_connects_all, kg=kg)
+            if args.kgqa_task:
+                dataset_kgqa = data_utils.DRAGON_DataLoader(args, args.train_statements_kgqa, args.train_adj_kgqa,
+                    args.dev_statements_kgqa, args.dev_adj_kgqa,
+                    args.test_statements_kgqa, args.test_adj_kgqa,
+                    batch_size=args.batch_size_kgqa, eval_batch_size=args.eval_batch_size,
+                    device=devices,
+                    model_name=args.encoder,
+                    max_node_num=args.max_node_num, max_seq_length=args.max_seq_len,
+                    is_inhouse=False, inhouse_train_qids_path=args.inhouse_train_qids,
+                    subsample=args.subsample, n_train=args.n_train, debug=args.debug, cxt_node_connects_all=args.cxt_node_connects_all, kg=kg)
             if args.local_rank == p_rank: #End of barrier
                 torch.distributed.barrier()
     else:
@@ -82,16 +93,27 @@ def load_data(args, devices, kg):
             max_node_num=args.max_node_num, max_seq_length=args.max_seq_len,
             is_inhouse=args.inhouse, inhouse_train_qids_path=args.inhouse_train_qids,
             subsample=args.subsample, n_train=args.n_train, debug=args.debug, cxt_node_connects_all=args.cxt_node_connects_all, kg=kg)
-        dataset_mrc = data_utils.DRAGON_DataLoader(args, args.train_statements_mrc, args.train_adj_mrc,
-            args.dev_statements_mrc, args.dev_adj_mrc,
-            args.test_statements_mrc, args.test_adj_mrc,
-            batch_size=args.batch_size, eval_batch_size=args.eval_batch_size,
-            device=devices,
-            model_name=args.encoder,
-            max_node_num=args.max_node_num, max_seq_length=args.max_seq_len,
-            is_inhouse=False, inhouse_train_qids_path=args.inhouse_train_qids,
-            subsample=args.subsample, n_train=args.n_train, debug=args.debug, cxt_node_connects_all=args.cxt_node_connects_all, kg=kg)
-    return dataset, dataset_mrc
+        if args.mrc_task:
+            dataset_mrc = data_utils.DRAGON_DataLoader(args, args.train_statements_mrc, args.train_adj_mrc,
+                args.dev_statements_mrc, args.dev_adj_mrc,
+                args.test_statements_mrc, args.test_adj_mrc,
+                batch_size=args.batch_size, eval_batch_size=args.eval_batch_size,
+                device=devices,
+                model_name=args.encoder,
+                max_node_num=args.max_node_num, max_seq_length=args.max_seq_len,
+                is_inhouse=False, inhouse_train_qids_path=args.inhouse_train_qids,
+                subsample=args.subsample, n_train=args.n_train, debug=args.debug, cxt_node_connects_all=args.cxt_node_connects_all, kg=kg)
+        if args.kgqa_task:
+            dataset_kgqa = data_utils.DRAGON_DataLoader(args, args.train_statements_kgqa, args.train_adj_kgqa,
+                args.dev_statements_kgqa, args.dev_adj_kgqa,
+                args.test_statements_kgqa, args.test_adj_kgqa,
+                batch_size=args.batch_size, eval_batch_size=args.eval_batch_size,
+                device=devices,
+                model_name=args.encoder,
+                max_node_num=args.max_node_num, max_seq_length=args.max_seq_len,
+                is_inhouse=False, inhouse_train_qids_path=args.inhouse_train_qids,
+                subsample=args.subsample, n_train=args.n_train, debug=args.debug, cxt_node_connects_all=args.cxt_node_connects_all, kg=kg)
+    return dataset, dataset_mrc, dataset_kgqa
 
 
 def construct_model(args, kg, dataset):
@@ -101,9 +123,22 @@ def construct_model(args, kg, dataset):
     cp_emb = [np.load(path) for path in args.ent_emb_paths]
     cp_emb = np.concatenate(cp_emb, 1)
     cp_emb = torch.tensor(cp_emb, dtype=torch.float)
-
+    
     concept_num, concept_in_dim = cp_emb.size(0), cp_emb.size(1)
     print('| num_concepts: {} |'.format(concept_num))
+
+    if args.kgqa_task:
+        cp_emb_kgqa = [np.load(path, allow_pickle=True) for path in args.ent_emb_paths_kgqa]
+        cp_emb_kgqa = np.concatenate(cp_emb_kgqa, 1)
+        cp_emb_kgqa = torch.tensor(cp_emb_kgqa, dtype=torch.float)
+
+        concept_num_kgqa, concept_in_dim_kgqa = cp_emb_kgqa.size(0), cp_emb_kgqa.size(1)
+        print('| num_concepts: {} |'.format(concept_num_kgqa))
+    else:
+        cp_emb_kgqa = None
+        concept_num_kgqa = 1
+        concept_in_dim_kgqa = 1
+    
     if args.random_ent_emb:
         cp_emb = None
         freeze_ent_emb = False
@@ -119,15 +154,6 @@ def construct_model(args, kg, dataset):
         n_ntype = 4
         n_etype = 38
         # assert n_etype == dataset.final_num_relation *2
-    elif kg == "ddb":
-        n_ntype = 4
-        n_etype = 34
-        # assert n_etype == dataset.final_num_relation *2
-    elif kg == "umls":
-        n_ntype = 4
-        n_etype = dataset.final_num_relation *2
-        print ('final_num_relation', dataset.final_num_relation, 'len(id2relation)', len(dataset.id2relation))
-        print ('final_num_relation', dataset.final_num_relation, 'len(id2relation)', len(dataset.id2relation), file=sys.stderr)
     else:
         raise ValueError("Invalid KG.")
     if args.cxt_node_connects_all:
@@ -141,7 +167,8 @@ def construct_model(args, kg, dataset):
         n_attention_head=args.att_head_num, fc_dim=args.fc_dim, n_fc_layer=args.fc_layer_num,
         p_emb=args.dropouti, p_gnn=args.dropoutg, p_fc=args.dropoutf,
         pretrained_concept_emb=cp_emb, freeze_ent_emb=freeze_ent_emb,
-        init_range=args.init_range, ie_dim=args.ie_dim, info_exchange=args.info_exchange, ie_layer_num=args.ie_layer_num, sep_ie_layers=args.sep_ie_layers, layer_id=args.encoder_layer)
+        init_range=args.init_range, ie_dim=args.ie_dim, info_exchange=args.info_exchange, ie_layer_num=args.ie_layer_num, sep_ie_layers=args.sep_ie_layers, layer_id=args.encoder_layer,
+        pretrained_concept_emb_kgqa=cp_emb_kgqa, n_concept_kgqa=concept_num_kgqa, concept_in_dim_kgqa=concept_in_dim_kgqa)
     return model
 
 
@@ -236,7 +263,7 @@ def calc_eval_accuracy(args, eval_set, model, loss_type, loss_func, debug, save_
 def create_miterator(qa_dataloader, mrc_dataloader=None, kgqa_dataloader=None):
     qa_d   = qa_dataloader
     mrc_d  = mrc_dataloader
-    kgqa_d = kgqa_dataloder
+    kgqa_d = kgqa_dataloader
 
     sizes = []
     if qa_d is not None:
@@ -244,38 +271,47 @@ def create_miterator(qa_dataloader, mrc_dataloader=None, kgqa_dataloader=None):
     if mrc_d is not None:
         sizes.append(len(mrc_d))
     if kgqa_d is not None:
-        sizes.append(kgqa_d.train_size)
+        sizes.append(len(kgqa_d))
     max_size = max(sizes)
     
     def mtask_iter():
         nonlocal qa_d, mrc_d, kgqa_d
-        qa_iter   = iter(qa_d)
-        mrc_iter  = iter(mrc_d)
+        if qa_d is not None:
+            qa_iter   = iter(qa_d)
+        if mrc_d is not None:
+            mrc_iter  = iter(mrc_d)
+        if kgqa_d is not None:
+            kgqa_iter = iter(kgqa_d)
         for i in range(max_size):
+            qa_sample   = None
+            mrc_sample  = None
+            kgqa_sample = None
+            
             if qa_d is not None:
                 try:
                     qa_sample = next(qa_iter)
                 except StopIteration:
-                    qa_iter = iter(qa_d)
+                    qa_iter   = iter(qa_d)
                     qa_sample = next(qa_iter)
                 
             if mrc_d is not None:
                 try:
                     mrc_sample = next(mrc_iter)
                 except StopIteration:
-                    mrc_iter = iter(qa_d)
+                    mrc_iter   = iter(mrc_d)
                     mrc_sample = next(mrc_iter)
                 
             if kgqa_d is not None:
                 try:
                     kgqa_sample = next(kgqa_iter)
                 except StopIteration:
-                    kgqa_iter = iter(kgqa_d)
+                    kgqa_iter   = iter(kgqa_d)
                     kgqa_sample = next(kgqa_iter)
                 
-            yield qa_sample, mrc_sample #, kgqa_sample
+            yield qa_sample, mrc_sample, kgqa_sample
             
     return mtask_iter
+
 
 def train(args, resume, has_test_split, devices, kg):
     print("args: {}".format(args))
@@ -302,14 +338,20 @@ def train(args, resume, has_test_split, devices, kg):
 
     model_path = os.path.join(args.save_dir, 'model.pt')
 
-    dataset, dataset_mrc = load_data(args, devices, kg)
+    dataset, dataset_mrc, dataset_kgqa = load_data(args, devices, kg)
 
     dev_dataloader = dataset.dev()
-    dev_dataloader_mrc = dataset_mrc.dev()
+    if args.mrc_task:
+        dev_dataloader_mrc = dataset_mrc.dev()
+    if args.kgqa_task:
+        dev_dataloader_kgqa = dataset_kgqa.dev()
     print("has_test_split", has_test_split)
     if has_test_split:
         test_dataloader = dataset.test()
-        test_dataloader_mrc = dataset_mrc.test()
+        if args.mrc_task:
+            test_dataloader_mrc = dataset_mrc.test()
+        if args.kgqa_task:
+            test_dataloader_kgqa = dataset_kgqa.test()
 
     model = construct_model(args, kg, dataset)
     INHERIT_BERT = os.environ.get('INHERIT_BERT', 0)
@@ -379,6 +421,16 @@ def train(args, resume, has_test_split, devices, kg):
             model_state_dict.pop('lmgnn.fc.layers.0-Linear.bias')
         except:
             pass
+        try:
+            model_state_dict.pop('lmgnn.fc_mrc.layers.0-Linear.weight')
+            model_state_dict.pop('lmgnn.fc_mrc.layers.0-Linear.bias')
+        except:
+            pass
+        try:
+            model_state_dict.pop('lmgnn.fc_kgqa.layers.0-Linear.weight')
+            model_state_dict.pop('lmgnn.fc_kgqa.layers.0-Linear.bias')
+        except:
+            pass
         model.load_state_dict(model_state_dict, strict=False)
 
 
@@ -432,18 +484,20 @@ def train(args, resume, has_test_split, devices, kg):
     if args.fp16:
         print ('Using fp16 training')
         print (f'Upcast {args.upcast}')
-        scaler = torch.cuda.amp.GradScaler()
+        scaler = torch.cuda.amp.GradScaler(growth_interval=100)
 
     print ('end_task', args.end_task, 'mlm_task', args.mlm_task, 'link_task', args.link_task)
 
     trloader = None
     trloader_mrc = None
+    trloader_kgqa = None
     
-    total_loss_acm = end_loss_acm = mlm_loss_acm = end_loss_mrc_acm = 0.0
+    total_loss_acm = end_loss_acm = mlm_loss_acm = end_loss_mrc_acm = end_loss_kgqa_acm = 0.0
     link_loss_acm = pos_link_loss_acm = neg_link_loss_acm = 0.0
-    n_samples_acm = n_corrects_acm = n_corrects_mrc_acm = 0
-    end_loss_mrc = n_corrects_mrc = 0
+    n_samples_acm = n_samples_mrc_acm = n_samples_kgqa_acm = n_corrects_acm = n_corrects_mrc_acm = n_corrects_kgqa_acm = 0
+    end_loss_mrc = end_loss_kgqa = n_corrects_mrc = n_corrects_kgqa = 0
     total_time = 0
+    cntr = 1
     model.train()
     # If all the parameters are frozen in the first few epochs, just skip those epochs.
     if len(params_to_freeze) >= len(list(model.parameters())) - 1:
@@ -462,47 +516,99 @@ def train(args, resume, has_test_split, devices, kg):
         
         trloader = dataset.train(steps=args.redef_epoch_steps, local_rank=args.local_rank)
         if args.mrc_task:
-            trloader_mrc = dataset_mrc.train(steps=args.redef_epoch_steps, local_rank=args.local_rank)
-        
-        loader = create_miterator(trloader, trloader_mrc)()
+            trloader_mrc  = dataset_mrc.train(steps=args.redef_epoch_steps, local_rank=args.local_rank)
+        if args.kgqa_task:
+            trloader_kgqa = dataset_kgqa.train(steps=args.redef_epoch_steps, local_rank=args.local_rank)
+        loader = create_miterator(trloader, trloader_mrc, trloader_kgqa)()
         
         sizes = []
         if trloader is not None:
             sizes.append(len(trloader))
         if trloader_mrc is not None:
             sizes.append(len(trloader_mrc))
+        if trloader_kgqa is not None:
+            sizes.append(len(trloader_kgqa))
         #
-        for i, (qa_data, mrc_data) in tqdm(enumerate(loader), desc="Batch", disable=args.local_rank not in [-1, 0],total=max(sizes)): #train_dataloader
+        labels_mrc = None
+        labels_kgqa = None
+        link_losses = [0, 0, 0]
+        end_loss = mlm_loss = 0
+        
+        for i, (qa_data, mrc_data, kgqa_data) in tqdm(enumerate(loader), desc="Batch", disable=args.local_rank not in [-1, 0],total=max(sizes)): #train_dataloader
             qids, labels, *input_data = qa_data
-            
+
             if args.mrc_task:
                 qids_mrc, labels_mrc, *input_data_mrc = mrc_data
+            if args.kgqa_task:
+                qids_kgqa, labels_kgqa, *input_data_kgqa = kgqa_data
             # labels: [bs]
             start_time = time.time()
             optimizer.zero_grad()
-            bs = labels.size(0)
-            a_list = list(range(0, bs, args.mini_batch_size))
-            for _idx_, a in enumerate(a_list):
+            sizes = [labels.size(0)//args.mini_batch_size]
+            
+            if labels_mrc is not None:
+                sizes.append(labels_mrc.size(0)//args.mini_batch_size_mrc)
+            if labels_kgqa is not None:
+                sizes.append(labels_kgqa.size(0)//args.mini_batch_size_kgqa)
+            bs = max(sizes)
+            a_list = list(range(bs))
+            aq = am = ak = 0
+            bq = bm = bk = 1
+
+            qa_check = True
+            mrc_check = True
+            kgqa_check = True
+            for _idx_, _ in enumerate(a_list):
                 is_last = (_idx_ == len(a_list) - 1)
-                b = min(a + args.mini_batch_size, bs)
+                bq = min(aq + args.mini_batch_size, labels.size(0))
+                if args.mrc_task:
+                    bm = min(am + args.mini_batch_size_mrc, labels_mrc.size(0))
+                if args.kgqa_task:
+                    bk = min(ak + args.mini_batch_size_kgqa, labels_kgqa.size(0))
                 if args.fp16:
                     with torch.cuda.amp.autocast():
-                        cntr = 0
-                        #try:
-                        if input_data[0][a:b].size()[0] == 0 or input_data_mrc[0][a:b].size()[0] == 0:
+                        if input_data[0][aq:bq].size()[0] == 0:
+                            qa_check = False
                             break
-                        logits, mlm_loss, link_losses = model(*[x[a:b] for x in input_data], t_type=0) # logits: [bs, nc]
-                        end_loss, n_corrects = calc_loss_and_acc(logits, labels[a:b], args.loss, loss_func)
-                        if args.mrc_task:
-                            logits_mrc, mlm_loss_mrc, link_losses_mrc = model(*[x[a:b] for x in input_data_mrc], t_type=1) # logits: [bs, nc]
-                            end_loss_mrc, n_corrects_mrc = calc_loss_and_acc(logits_mrc, labels_mrc[a:b], args.loss, loss_func)
+                        if args.mrc_task and input_data_mrc[0][am:bm].size()[0] == 0:
+                            mrc_check = False
+                            break
+                        if args.kgqa_task and input_data_kgqa[0][ak:bk].size()[0] == 0:
+                            kgqa_check = False
+                            break
+                        print(mrc_check, qa_check, kgqa_check)
+                        if qa_check:    
+                            logits, mlm_loss, link_losses = model(*[x[aq:bq] for x in input_data], t_type=0) # logits: [bs, nc]
+                            end_loss, n_corrects = calc_loss_and_acc(logits, labels[aq:bq], args.loss, loss_func)
+                            print('qa', n_corrects, bq-aq)
+                        if mrc_check and args.mrc_task:
+                            logits_mrc, mlm_loss_mrc, link_losses_mrc = model(*[x[am:bm] for x in input_data_mrc], t_type=1) # logits: [bs, nc]
+                            end_loss_mrc, n_corrects_mrc = calc_loss_and_acc(logits_mrc, labels_mrc[am:bm], args.loss, loss_func)
+                            print('mrc', n_corrects_mrc, bm-am)
+                        if kgqa_check and args.kgqa_task:
+                            logits_kgqa, mlm_loss_kgqa, link_losses_kgqa = model(*[x[ak:bk] for x in input_data_kgqa], t_type=2) # logits: [bs, nc]
+                            end_loss_kgqa, n_corrects_kgqa = calc_loss_and_acc(logits_kgqa, labels_kgqa[ak:bk], args.loss, loss_func)
+                            print('kgqa', n_corrects_kgqa, bk-ak)
                 else:
-                    logits, mlm_loss, link_losses = model(*[x[a:b] for x in input_data]) # logits: [bs, nc]
-                    end_loss, n_corrects = calc_loss_and_acc(logits, labels[a:b], args.loss, loss_func)
-                    logits_mrc, mlm_loss_mrc, link_losses_mrc = model(*[x[a:b] for x in input_data_mrc]) # logits: [bs, nc]
-                    end_loss_mrc, n_corrects_mrc = calc_loss_and_acc(logits_mrc, labels_mrc[a:b], args.loss, loss_func)
+                    if input_data[0][aq:bq].size()[0] == 0:
+                        qa_check = False
+                        break
+                    if args.mrc_task and input_data_mrc[0][am:bm].size()[0] == 0:
+                        mrc_check = False
+                        break
+                    if args.kgqa_task and input_data_kgqa[0][ak:bk].size()[0] == 0:
+                        kgqa_check = False
+                        break
+                    logits, mlm_loss, link_losses = model(*[x[aq:bq] for x in input_data], t_type=0) # logits: [bs, nc]
+                    end_loss, n_corrects = calc_loss_and_acc(logits, labels[aq:bq], args.loss, loss_func)
+                    if args.mrc_task:
+                        logits_mrc, mlm_loss_mrc, link_losses_mrc = model(*[x[am:bm] for x in input_data_mrc], t_type=1) # logits: [bs, nc]
+                        end_loss_mrc, n_corrects_mrc = calc_loss_and_acc(logits_mrc, labels_mrc[am:bm], args.loss, loss_func)
+                    if args.kgqa_task:
+                        logits_kgqa, mlm_loss_kgqa, link_losses_kgqa = model(*[x[ak:bk] for x in input_data_kgqa], t_type=2) # logits: [bs, nc]
+                        end_loss_kgqa, n_corrects_kgqa = calc_loss_and_acc(logits_kgqa, labels_kgqa[ak:bk], args.loss, loss_func)
                 link_loss, pos_link_loss, neg_link_loss = link_losses
-                loss = args.end_task * end_loss + args.mlm_task * mlm_loss + args.link_task * link_loss + args.mrc_task * end_loss_mrc
+                loss = args.end_task * end_loss / (bq-aq) + args.mrc_task * end_loss_mrc / (bm-am) + args.kgqa_task * end_loss_kgqa / (bk-ak)
 
                 total_loss_acm += float(loss)
                 end_loss_acm += float(end_loss)
@@ -511,8 +617,11 @@ def train(args, resume, has_test_split, devices, kg):
                 pos_link_loss_acm += float(pos_link_loss)
                 neg_link_loss_acm += float(neg_link_loss)
                 end_loss_mrc_acm += float(end_loss_mrc)
+                end_loss_kgqa_acm += float(end_loss_kgqa)
+                cntr += 1
+              #  loss = loss 
+                print("loss: ", loss)
 
-                loss = loss / bs
                 if (args.local_rank != -1) and (not is_last):
                     with model.no_sync():
                         if args.fp16:
@@ -525,9 +634,19 @@ def train(args, resume, has_test_split, devices, kg):
                     else:
                         loss.backward()
 
-                n_corrects_acm += n_corrects
-                n_corrects_mrc_acm += n_corrects_mrc
-                n_samples_acm += (b - a)
+                n_corrects_acm += n_corrects if qa_check else 0
+                n_corrects_mrc_acm += n_corrects_mrc if mrc_check else 0
+                n_corrects_kgqa_acm += n_corrects_kgqa if kgqa_check else 0
+                n_samples_acm += (bq - aq) if qa_check else 0
+                n_samples_mrc_acm += (bm - am) if mrc_check else 0
+                n_samples_kgqa_acm += (bk - ak) if kgqa_check else 0
+
+                aq += args.mini_batch_size
+                am += args.mini_batch_size_mrc
+                ak += args.mini_batch_size_kgqa
+                qa_check = True
+                mrc_check = True
+                kgqa_check = True
 
             if args.max_grad_norm > 0:
                 if args.fp16:
@@ -552,20 +671,23 @@ def train(args, resume, has_test_split, devices, kg):
                 if args.local_rank in [-1, 0]:
                     print('| step {:5} |  lr: {:9.7f} | total loss {:7.4f} | ms/batch {:7.2f} |'.format(global_step, scheduler.get_lr()[0], total_loss_acm / n_samples_acm, ms_per_batch))
                     wandb.log({"lr": scheduler.get_lr()[0],
-                                "train_loss": total_loss_acm / n_samples_acm,
+                                "train_loss": total_loss_acm / cntr,
                                 "train_end_loss": end_loss_acm / n_samples_acm,
                                 "train_mlm_loss": mlm_loss_acm / n_samples_acm,
                                 "train_link_loss": link_loss_acm / n_samples_acm,
                                 "train_pos_link_loss": pos_link_loss_acm / n_samples_acm,
                                 "train_neg_link_loss": neg_link_loss_acm / n_samples_acm,
-                                "train_mrc_loss": end_loss_mrc_acm / n_samples_acm,
+                                "train_mrc_loss": end_loss_mrc_acm / n_samples_mrc_acm,
+                                "train_kgqa_loss": end_loss_kgqa_acm / n_samples_kgqa_acm,
                                 "train_acc": n_corrects_acm / n_samples_acm,
-                                "train_mrc_acc": n_corrects_mrc_acm / n_samples_acm,
+                                "train_mrc_acc": n_corrects_mrc_acm / n_samples_mrc_acm,
+                                "train_kgqa_acc": n_corrects_kgqa_acm / n_samples_kgqa_acm,
                                 "ms_per_batch": ms_per_batch}, step=global_step)
 
-                total_loss_acm = end_loss_acm = mlm_loss_acm = end_loss_mrc_acm = 0.0
+                total_loss_acm = end_loss_acm = mlm_loss_acm = end_loss_mrc_acm = end_loss_kgqa_acm = 0.0
                 link_loss_acm = pos_link_loss_acm = neg_link_loss_acm = 0.0
-                n_samples_acm = n_corrects_acm = n_corrects_mrc_acm = 0
+                n_samples_acm = n_corrects_acm = n_corrects_mrc_acm = n_corrects_kgqa_acm = n_samples_mrc_acm = n_samples_kgqa_acm = 0
+                cntr = 0
                 total_time = 0
             global_step += 1 # Number of batches processed up to now
 
@@ -574,7 +696,10 @@ def train(args, resume, has_test_split, devices, kg):
             model.eval()
             preds_path = os.path.join(args.save_dir, 'dev_e{}_preds.csv'.format(epoch_id))
             dev_total_loss, dev_end_loss, dev_mlm_loss, dev_link_loss, dev_pos_link_loss, dev_neg_link_loss, dev_acc = calc_eval_accuracy(args, dev_dataloader, model, args.loss, loss_func, args.debug, not args.debug, preds_path, t_type=0)
-            dev_total_loss_mrc, dev_end_loss_mrc, dev_mlm_loss_mrc, dev_link_loss_mrc, dev_pos_link_loss_mrc, dev_neg_link_loss_mrc, dev_acc_mrc = calc_eval_accuracy(args, dev_dataloader_mrc, model, args.loss, loss_func, args.debug, not args.debug, preds_path, t_type=1)
+            if args.mrc_task:
+                dev_total_loss_mrc, dev_end_loss_mrc, dev_mlm_loss_mrc, dev_link_loss_mrc, dev_pos_link_loss_mrc, dev_neg_link_loss_mrc, dev_acc_mrc = calc_eval_accuracy(args, dev_dataloader_mrc, model, args.loss, loss_func, args.debug, not args.debug, preds_path, t_type=1)
+            if args.kgqa_task:
+                dev_total_loss_kgqa, dev_end_loss_kgqa, dev_mlm_loss_kgqa, dev_link_loss_kgqa, dev_pos_link_loss_kgqa, dev_neg_link_loss_kgqa, dev_acc_kgqa = calc_eval_accuracy(args, dev_dataloader_kgqa, model, args.loss, loss_func, args.debug, not args.debug, preds_path, t_type=2)
             print ('dev_acc', dev_acc)
             if args.end_task and (args.mlm_task or args.link_task):
                 dev_dataloader.set_eval_end_task_mode(True)
@@ -585,13 +710,20 @@ def train(args, resume, has_test_split, devices, kg):
                 _, dev_end_loss_mrc, _, _,_,_, dev_acc_mrc = calc_eval_accuracy(args, dev_dataloader_mrc, model, args.loss, loss_func, args.debug, not args.debug, preds_path)
                 dev_dataloader_mrc.set_eval_end_task_mode(False)
                 print ('dev_acc (eval_end_task_mode)', dev_acc)
+            if args.kgqa_task:    
+                dev_dataloader_kgqa.set_eval_end_task_mode(True)
+                _, dev_end_loss_kgqa, _, _,_,_, dev_acc_kgqa = calc_eval_accuracy(args, dev_dataloader_kgqa, model, args.loss, loss_func, args.debug, not args.debug, preds_path)
+                dev_dataloader_kgqa.set_eval_end_task_mode(False)
 
             if has_test_split:
                 preds_path = os.path.join(args.save_dir, 'test_e{}_preds.csv'.format(epoch_id))
-                test_total_loss, test_end_loss, test_mlm_loss, test_link_loss, test_pos_link_loss, test_neg_link_loss, test_acc = calc_eval_accuracy(args, test_dataloader, model, args.loss, loss_func, args.debug, not args.debug, preds_path)
+                test_total_loss, test_end_loss, test_mlm_loss, test_link_loss, test_pos_link_loss, test_neg_link_loss, test_acc = calc_eval_accuracy(args, test_dataloader, model, args.loss, loss_func, args.debug, not args.debug, preds_path, t_type=0)
                 if args.mrc_task:
                     preds_path = os.path.join(args.save_dir, 'test_e{}_preds.csv'.format(epoch_id))
-                    test_total_loss_mrc, test_end_loss_mrc, test_mlm_loss_mrc, test_link_loss_mrc, test_pos_link_loss_mrc, test_neg_link_loss_mrc, test_acc_mrc = calc_eval_accuracy(args, test_dataloader_mrc, model, args.loss, loss_func, args.debug, not args.debug, preds_path)
+                    test_total_loss_mrc, test_end_loss_mrc, test_mlm_loss_mrc, test_link_loss_mrc, test_pos_link_loss_mrc, test_neg_link_loss_mrc, test_acc_mrc = calc_eval_accuracy(args, test_dataloader_mrc, model, args.loss, loss_func, args.debug, not args.debug, preds_path, t_type=1)
+                if args.kgqa_task:
+                    preds_path = os.path.join(args.save_dir, 'test_e{}_preds.csv'.format(epoch_id))
+                    test_total_loss_kgqa, test_end_loss_kgqa, test_mlm_loss_kgqa, test_link_loss_kgqa, test_pos_link_loss_kgqa, test_neg_link_loss_kgqa, test_acc_kgqa = calc_eval_accuracy(args, test_dataloader_kgqa, model, args.loss, loss_func, args.debug, not args.debug, preds_path, t_type=2)
                 print ('test_acc', test_acc)
                 if args.end_task and (args.mlm_task or args.link_task):
                     test_dataloader.set_eval_end_task_mode(True)
@@ -601,6 +733,10 @@ def train(args, resume, has_test_split, devices, kg):
                         test_dataloader_mrc.set_eval_end_task_mode(True)
                         _, test_end_loss_mrc, _, _,_,_, test_acc_mrc = calc_eval_accuracy(args, test_dataloader_mrc, model, args.loss, loss_func, args.debug, not args.debug, preds_path)
                         test_dataloader_mrc.set_eval_end_task_mode(False)
+                    if args.kgqa_task:
+                        test_dataloader_kgqa.set_eval_end_task_mode(True)
+                        _, test_end_loss_kgqa, _, _,_,_, test_acc_kgqa = calc_eval_accuracy(args, test_dataloader_kgqa, model, args.loss, loss_func, args.debug, not args.debug, preds_path)
+                        test_dataloader_kgqa.set_eval_end_task_mode(False)
                     print ('test_acc (eval_end_task_mode)', test_acc)
             else:
                 test_acc = 0
@@ -620,10 +756,14 @@ def train(args, resume, has_test_split, devices, kg):
             wandb.log({"dev_acc": dev_acc, "dev_loss": dev_total_loss, "dev_end_loss": dev_end_loss, "dev_mlm_loss": dev_mlm_loss, "dev_link_loss": dev_link_loss, "dev_pos_link_loss": dev_pos_link_loss, "dev_neg_link_loss": dev_neg_link_loss, "best_dev_acc": best_dev_acc, "best_dev_epoch": best_dev_epoch}, step=global_step)
             if args.mrc_task:
                 wandb.log({"dev_acc_mrc": dev_acc_mrc,"dev_end_loss_mrc": dev_end_loss_mrc}, step=global_step)
+            if args.kgqa_task:
+                wandb.log({"dev_acc_kgqa": dev_acc_kgqa,"dev_end_loss_kgqa": dev_end_loss_kgqa}, step=global_step)
             if has_test_split:
                 wandb.log({"test_acc": test_acc, "test_loss": test_total_loss, "test_link_loss": test_link_loss, "test_pos_link_loss": test_pos_link_loss, "test_neg_link_loss": test_neg_link_loss, "test_end_loss": test_end_loss, "test_mlm_loss": test_mlm_loss, "final_test_acc": final_test_acc}, step=global_step)
                 if args.mrc_task:
                     wandb.log({"test_acc_mrc": test_acc_mrc, "test_end_loss_mrc": test_end_loss}, step=global_step)
+                if args.kgqa_task:
+                    wandb.log({"test_acc_kgqa": test_acc_kgqa, "test_end_loss_kgqa": test_end_loss}, step=global_step)
                 if args.use_codalab:
                     with open("stats.json", 'w') as fout:
                         json.dump({'epoch': epoch_id, 'step': global_step, 'dev_acc': dev_acc, 'test_acc': test_acc}, fout, indent=2)
@@ -734,7 +874,7 @@ def get_devices(args):
             print("device0: {}, device1: {}".format(device0, device1))
         elif torch.cuda.device_count() == 1 and args.cuda:
             device0 = torch.device("cuda:0")
-            device1 = torch.device("cuda:0")
+            device1 = torch.device("cuda:1")
         else:
             device0 = torch.device("cpu")
             device1 = torch.device("cpu")
@@ -743,7 +883,7 @@ def get_devices(args):
         torch.cuda.set_device(args.local_rank)
         device0 = torch.device("cuda", args.local_rank)
         device1 = device0
-        torch.distributed.init_process_group(backend="nccl")
+#        torch.distributed.init_process_group(backend="nccl")
 
     args.world_size = world_size = torch.distributed.get_world_size() if args.local_rank != -1 else 1
     print ("Process rank: %s, device: %s, distributed training: %s, world_size: %s" %
@@ -763,6 +903,7 @@ def main(args):
                         level=logging.WARNING)
 
     has_test_split = True
+
     devices = get_devices(args)
 
     if not args.use_wandb:
@@ -837,6 +978,7 @@ if __name__ == '__main__':
     parser.add_argument('--mlm_task', type=float, default=0.0, help='Task weight for the MLM task')
     parser.add_argument('--link_task', type=float, default=0.0, help='Task weight for the LinkPred task')
     parser.add_argument('--mrc_task', type=float, default=1.0, help='Task weight for the MRC task')
+    parser.add_argument('--kgqa_task', type=float, default=1.0, help='Task weight for the MRC task')
 
     parser.add_argument('--mlm_probability', type=float, default=0.15, help='')
     parser.add_argument('--span_mask', type=utils.bool_flag, default=False, help='')
@@ -865,6 +1007,10 @@ if __name__ == '__main__':
     parser.add_argument('--train_adj_mrc', default=f'{args.data_dir}/{args.dataset_mrc}/graph/train.graph.adj.pk', help="The path to the retrieved KG subgraphs of the training set.")
     parser.add_argument('--dev_adj_mrc', default=f'{args.data_dir}/{args.dataset_mrc}/graph/dev.graph.adj.pk', help="The path to the retrieved KG subgraphs of the dev set.")
     parser.add_argument('--test_adj_mrc', default=f'{args.data_dir}/{args.dataset_mrc}/graph/test.graph.adj.pk', help="The path to the retrieved KG subgraphs of the test set.")
+
+    parser.add_argument('--train_adj_kgqa', default=f'{args.data_dir}/{args.dataset_kgqa}/graph/train.graph.adj.pk', help="The path to the retrieved KG subgraphs of the training set.")
+    parser.add_argument('--dev_adj_kgqa', default=f'{args.data_dir}/{args.dataset_kgqa}/graph/dev.graph.adj.pk', help="The path to the retrieved KG subgraphs of the dev set.")
+    parser.add_argument('--test_adj_kgqa', default=f'{args.data_dir}/{args.dataset_kgqa}/graph/test.graph.adj.pk', help="The path to the retrieved KG subgraphs of the test set.")
     
     parser.add_argument('--max_node_num', default=200, type=int, help="Max number of nodes / the threshold used to prune nodes.")
     parser.add_argument('--subsample', default=1.0, type=float, help="The ratio to subsample the training set.")
@@ -895,6 +1041,8 @@ if __name__ == '__main__':
     # Optimization
     parser.add_argument('-dlr', '--decoder_lr', default=1e-3, type=float, help='Learning rate of parameters not in LM')
     parser.add_argument('-mbs', '--mini_batch_size', default=1, type=int)
+    parser.add_argument('-mbsm', '--mini_batch_size_mrc', default=1, type=int)
+    parser.add_argument('-mbsk', '--mini_batch_size_kgqa', default=1, type=int)
     parser.add_argument('-ebs', '--eval_batch_size', default=2, type=int)
     parser.add_argument('--unfreeze_epoch', default=4, type=int, help="Number of the first few epochs in which LM’s parameters are kept frozen.")
     parser.add_argument('--refreeze_epoch', default=10000, type=int)
