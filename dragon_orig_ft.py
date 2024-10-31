@@ -18,7 +18,7 @@ except:
 import wandb
 
 from modeling import modeling_dragon
-from utils import data_utils_orig as data_utils
+from utils import data_utils_orig_ft as data_utils
 from utils import optimization_utils
 from utils import parser_utils
 from utils import utils
@@ -264,8 +264,8 @@ def train(args, resume, has_test_split, devices, kg):
 
     model_path = os.path.join(args.save_dir, 'model.pt')
 
-    dataset = load_data(args, devices, kg, k=0)
-   # dev_dataloader = dataset.dev()
+    dataset = load_data(args, devices, kg, k=None)
+    dev_dataloader = dataset.dev()
     if has_test_split:
         test_dataloader = dataset.test()
 
@@ -354,12 +354,15 @@ def train(args, resume, has_test_split, devices, kg):
         except:
             scheduler = get_constant_schedule_with_warmup(optimizer, num_warmup_steps=args.warmup_steps, last_epoch=last_epoch)
     elif args.lr_schedule == 'warmup_linear':
-        max_steps = int(args.n_epochs * 500 * 8 * (dataset.train_size() / args.batch_size))
+        max_steps = int(args.n_epochs * 8 * (dataset.train_size() / args.batch_size))
         print("MAX_STEPS:", max_steps)
         try:
             scheduler = WarmupLinearSchedule(optimizer, warmup_steps=args.warmup_steps, t_total=max_steps, last_epoch=last_epoch)
         except:
             scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=max_steps, last_epoch=last_epoch)
+    elif args.lr_schedule == 'warmup_cosine_restart':
+        max_steps = int(args.n_epochs * 8 * (dataset.train_size() / args.batch_size))
+        scheduler = transformers.get_cosine_with_hard_restarts_schedule_with_warmup(optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=max_steps, num_cycles=5, last_epoch=last_epoch)
     if resume:
         scheduler.load_state_dict(checkpoint["scheduler"])
         print("loaded scheduler", checkpoint["scheduler"])
@@ -399,7 +402,7 @@ def train(args, resume, has_test_split, devices, kg):
     link_loss_acm = pos_link_loss_acm = neg_link_loss_acm = 0.0
     n_samples_acm = n_corrects_acm = 0
     total_time = 0
-    splits_count=500
+    splits_count=1
     model.train()
     # If all the parameters are frozen in the first few epochs, just skip those epochs.
     if len(params_to_freeze) >= len(list(model.parameters())) - 1:
@@ -506,8 +509,8 @@ def train(args, resume, has_test_split, devices, kg):
             if args.local_rank in [-1, 0]:
                 model.eval()
                 preds_path = os.path.join(args.save_dir, 'dev_e{}_preds.csv'.format(epoch_id))
-                dev_total_loss = dev_end_loss = dev_mlm_loss = dev_link_loss = dev_pos_link_loss = dev_neg_link_loss = dev_acc = 0.0
-            #    dev_total_loss, dev_end_loss, dev_mlm_loss, dev_link_loss, dev_pos_link_loss, dev_neg_link_loss, dev_acc = calc_eval_accuracy(args, dev_dataloader, model, args.loss, loss_func, args.debug, not args.debug, preds_path)
+            #    dev_total_loss = dev_end_loss = dev_mlm_loss = dev_link_loss = dev_pos_link_loss = dev_neg_link_loss = dev_acc = 0.0
+                dev_total_loss, dev_end_loss, dev_mlm_loss, dev_link_loss, dev_pos_link_loss, dev_neg_link_loss, dev_acc = calc_eval_accuracy(args, dev_dataloader, model, args.loss, loss_func, args.debug, not args.debug, preds_path)
                 print ('dev_acc', dev_acc)
                 if args.end_task and (args.mlm_task or args.link_task):
                     dev_dataloader.set_eval_end_task_mode(True)
@@ -680,7 +683,7 @@ def main(args):
                         datefmt='%m/%d/%Y %H:%M:%S',
                         level=logging.WARNING)
 
-    has_test_split = False
+    has_test_split = True
     torch.distributed.init_process_group(backend="nccl", timeout=datetime.timedelta(seconds=1800))
     print("RANK ", torch.distributed.get_rank())
     args.local_rank = torch.distributed.get_rank()

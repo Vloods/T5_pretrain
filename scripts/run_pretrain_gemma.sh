@@ -8,15 +8,15 @@ dt=`date '+%Y%m%d_%H%M%S'`
 
 dataset="books3_splits_scores"
 shift
-encoder='roberta-large'
+encoder='google/gemma-2-2b'
 args=$@
 
 
 elr="2e-5"
 dlr="3e-4"
 bs=7500
-mbs=64
-unfreeze_epoch=2
+mbs=2
+unfreeze_epoch=10
 k=2 #num of gnn layers
 residual_ie=2
 gnndim=200
@@ -25,10 +25,10 @@ gnndim=200
 encoder_layer=-1
 max_node_num=200
 seed=5
-lr_schedule=warmup_linear
-warmup_steps=2000
+lr_schedule=warmup_cosine_restart
+warmup_steps=451
 
-n_epochs=45
+n_epochs=5
 max_epochs_before_stop=45
 ie_dim=400
 
@@ -87,7 +87,7 @@ run_name=dragon__${dataset}__${dt}
 log=logs/pretrain__${run_name}.log.txt
 
 ###### Training ######
-torchrun --nnodes=1 --nproc_per_node=8 dragon_orig.py \
+torchrun --nnodes=1 --nproc_per_node=8 dragon_gemma.py \
     --dataset $dataset \
     --encoder $encoder -k $k --gnn_dim $gnndim -elr $elr -dlr $dlr -bs $bs --seed $seed -mbs ${mbs} --unfreeze_epoch ${unfreeze_epoch} --encoder_layer=${encoder_layer} -sl ${max_seq_len} --max_node_num ${max_node_num} \
     --n_epochs $n_epochs --max_epochs_before_stop ${max_epochs_before_stop} --fp16 $fp16 --upcast $upcast --use_wandb true \

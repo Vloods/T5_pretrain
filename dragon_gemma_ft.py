@@ -17,14 +17,15 @@ except:
     from transformers import get_constant_schedule, get_constant_schedule_with_warmup,  get_linear_schedule_with_warmup
 import wandb
 
-from modeling import modeling_dragon
-from utils import data_utils_orig as data_utils
+from modeling import modeling_dragon_gemma as modeling_dragon
+from utils import data_utils_gemma_exp_ft as data_utils
 from utils import optimization_utils
 from utils import parser_utils
 from utils import utils
 import datetime
 import re
 
+from transformers import Gemma2Config
 
 import numpy as np
 
@@ -108,6 +109,7 @@ def construct_model(args, kg):
     ########################################################
     #   Load pretrained concept embeddings
     ########################################################
+    
     cp_emb = [np.load(path) for path in args.ent_emb_paths]
     cp_emb = np.concatenate(cp_emb, 1)
     cp_emb = torch.tensor(cp_emb, dtype=torch.float)
@@ -143,7 +145,13 @@ def construct_model(args, kg):
     print ('n_ntype', n_ntype, 'n_etype', n_etype)
     print ('n_ntype', n_ntype, 'n_etype', n_etype, file=sys.stderr)
     encoder_load_path = args.encoder_load_path if args.encoder_load_path else args.encoder
-    model = modeling_dragon.DRAGON(args, encoder_load_path, k=args.k, n_ntype=n_ntype, n_etype=n_etype, n_concept=concept_num,
+    config, _ = Gemma2Config.from_pretrained(
+        encoder_load_path,
+        cache_dir=None, return_unused_kwargs=True,
+        force_download=False,
+        output_hidden_states=True,
+    )
+    model = modeling_dragon.DRAGON(config, args, encoder_load_path, k=args.k, n_ntype=n_ntype, n_etype=n_etype, n_concept=concept_num,
         concept_dim=args.gnn_dim,
         concept_in_dim=concept_in_dim,
         n_attention_head=args.att_head_num, fc_dim=args.fc_dim, n_fc_layer=args.fc_layer_num,
@@ -264,14 +272,14 @@ def train(args, resume, has_test_split, devices, kg):
 
     model_path = os.path.join(args.save_dir, 'model.pt')
 
-    dataset = load_data(args, devices, kg, k=0)
-   # dev_dataloader = dataset.dev()
+    dataset = load_data(args, devices, kg, k=None)
+    dev_dataloader = dataset.dev()
     if has_test_split:
         test_dataloader = dataset.test()
 
     model = construct_model(args, kg)
-    INHERIT_BERT = os.environ.get('INHERIT_BERT', 0)
-    bert_or_roberta = model.lmgnn.bert if INHERIT_BERT else model.lmgnn.roberta
+    
+    bert_or_roberta = model.lmgnn.llama
     bert_or_roberta.resize_token_embeddings(len(dataset.tokenizer))
 
     # Get the names of the loaded LM parameters
@@ -354,12 +362,16 @@ def train(args, resume, has_test_split, devices, kg):
         except:
             scheduler = get_constant_schedule_with_warmup(optimizer, num_warmup_steps=args.warmup_steps, last_epoch=last_epoch)
     elif args.lr_schedule == 'warmup_linear':
-        max_steps = int(args.n_epochs * 500 * 8 * (dataset.train_size() / args.batch_size))
+        max_steps = int(args.n_epochs * 8 * (dataset.train_size() / args.batch_size))
         print("MAX_STEPS:", max_steps)
         try:
             scheduler = WarmupLinearSchedule(optimizer, warmup_steps=args.warmup_steps, t_total=max_steps, last_epoch=last_epoch)
         except:
             scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=max_steps, last_epoch=last_epoch)
+    elif args.lr_schedule == 'warmup_cosine_restart':
+        max_steps = int(args.n_epochs * 8 * (dataset.train_size() / args.batch_size))
+        scheduler = transformers.get_cosine_with_hard_restarts_schedule_with_warmup(optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=max_steps, num_cycles=5, last_epoch=last_epoch)
+
     if resume:
         scheduler.load_state_dict(checkpoint["scheduler"])
         print("loaded scheduler", checkpoint["scheduler"])
@@ -399,7 +411,7 @@ def train(args, resume, has_test_split, devices, kg):
     link_loss_acm = pos_link_loss_acm = neg_link_loss_acm = 0.0
     n_samples_acm = n_corrects_acm = 0
     total_time = 0
-    splits_count=500
+    splits_count=1
     model.train()
     # If all the parameters are frozen in the first few epochs, just skip those epochs.
     if len(params_to_freeze) >= len(list(model.parameters())) - 1:
@@ -434,7 +446,7 @@ def train(args, resume, has_test_split, devices, kg):
                     is_last = (_idx_ == len(a_list) - 1)
                     b = min(a + args.mini_batch_size, bs)
                     if args.fp16:
-                        with torch.cuda.amp.autocast():
+                        with torch.amp.autocast('cuda', dtype=torch.bfloat16):
                             logits, mlm_loss, link_losses = model(*[x[a:b] for x in input_data]) # logits: [bs, nc]
                             end_loss, n_corrects = calc_loss_and_acc(logits, labels[a:b], args.loss, loss_func)
                     else:
@@ -506,8 +518,8 @@ def train(args, resume, has_test_split, devices, kg):
             if args.local_rank in [-1, 0]:
                 model.eval()
                 preds_path = os.path.join(args.save_dir, 'dev_e{}_preds.csv'.format(epoch_id))
-                dev_total_loss = dev_end_loss = dev_mlm_loss = dev_link_loss = dev_pos_link_loss = dev_neg_link_loss = dev_acc = 0.0
-            #    dev_total_loss, dev_end_loss, dev_mlm_loss, dev_link_loss, dev_pos_link_loss, dev_neg_link_loss, dev_acc = calc_eval_accuracy(args, dev_dataloader, model, args.loss, loss_func, args.debug, not args.debug, preds_path)
+           #     dev_total_loss = dev_end_loss = dev_mlm_loss = dev_link_loss = dev_pos_link_loss = dev_neg_link_loss = dev_acc = 0.0
+                dev_total_loss, dev_end_loss, dev_mlm_loss, dev_link_loss, dev_pos_link_loss, dev_neg_link_loss, dev_acc = calc_eval_accuracy(args, dev_dataloader, model, args.loss, loss_func, args.debug, not args.debug, preds_path)
                 print ('dev_acc', dev_acc)
                 if args.end_task and (args.mlm_task or args.link_task):
                     dev_dataloader.set_eval_end_task_mode(True)
@@ -598,9 +610,9 @@ def evaluate(args, has_test_split, devices, kg):
     dev_dataloader = dataset.dev()
     if has_test_split:
         test_dataloader = dataset.test()
-    model = construct_model(args, kg, dataset)
+    model = construct_model(args, kg)
     INHERIT_BERT = os.environ.get('INHERIT_BERT', 0)
-    bert_or_roberta = model.lmgnn.bert if INHERIT_BERT else model.lmgnn.roberta
+    bert_or_roberta = model.lmgnn.bert if INHERIT_BERT else model.lmgnn.llama
     bert_or_roberta.resize_token_embeddings(len(dataset.tokenizer))
 
     model.load_state_dict(checkpoint["model"], strict=False)
@@ -680,10 +692,11 @@ def main(args):
                         datefmt='%m/%d/%Y %H:%M:%S',
                         level=logging.WARNING)
 
-    has_test_split = False
-    torch.distributed.init_process_group(backend="nccl", timeout=datetime.timedelta(seconds=1800))
-    print("RANK ", torch.distributed.get_rank())
-    args.local_rank = torch.distributed.get_rank()
+    has_test_split = True
+    if args.mode == 'train':
+        torch.distributed.init_process_group(backend="nccl", timeout=datetime.timedelta(seconds=1800))
+        print("RANK ", torch.distributed.get_rank())
+        args.local_rank = torch.distributed.get_rank()
     devices = get_devices(args)
 
     if not args.use_wandb:
