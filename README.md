@@ -3,10 +3,7 @@
 This repo provides the **source code & data** of our paper "Multitask Finetuning on Pretrained KG-enchanced LLM for Question Answering and Machine Reading Comprehension Tasks".
 
 
-<p align="center">
-  <img src="./figs/model_arch.png" width="500" title="Model finetune overview" alt="">
-</p>
-
+![Model finetune overview](./figs/model_arch.png)
 
 
 ## 0. Dependencies
@@ -37,7 +34,7 @@ Download pretrained models and place files under `./models`
 
 ## 2. Download data
 
-Download all the preprocessed data from [here](https://sc.link/Vke9N) (~596 GB), kgqa data [here](https://sc.link/tfeLW) (~2 GB).
+Download all the preprocessed data from [here](https://sc.link/Vke9N) (596 GB), kgqa data [here](https://sc.link/tfeLW) (2 GB).
 
 ## 3. How to train
 
