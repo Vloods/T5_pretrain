@@ -3,14 +3,11 @@
 This repo provides the **source code & data** of our paper "Multitask Finetuning on Pretrained KG-enchanced LLM for Question Answering and Machine Reading Comprehension Tasks".
 
 
-<p align="center">
-  <img src="./figs/model_arch.png" width="500" title="Model finetune overview" alt="">
-</p>
-
+![Model finetune overview](./figs/model_arch.png)
 
 
 ## 0. Dependencies
-Installation guide for training **Roberta/T5** with H/A 100  
+Installation guide for training **Roberta** with H/A 100  
 
 **Requirements:** python3.8, cuda11.8, torch2.0.1, pyg2.4, transformers4.10
 
@@ -32,13 +29,12 @@ Download pretrained models and place files under `./models`
 
 | Model  | Size | Pretraining Text | Pretraining Knowledge Graph | Download Link |
 | ------------- | --------- | ---- | ---- | ---- |
-| T5-base | 220M parameters | BookCorpus (filtered) | ConceptNet | link (will be updated) |
 | RoBERTa | 360M parameters | BookCorpus (filtered) | ConceptNet | link (will be updated) |
 
 
 ## 2. Download data
 
-Download all the preprocessed data from [here](https://sc.link/Vke9N) (~596 GB), kgqa data [here](https://sc.link/tfeLW) (~2 GB).
+Download all the preprocessed data from [here](https://sc.link/Vke9N) (596 GB), kgqa data [here](https://sc.link/tfeLW) (2 GB).
 
 ## 3. How to train
 
@@ -55,7 +51,6 @@ scripts/run_train__joint.sh
 **(Optional)** To pretrain model on your own data, you can run:
 ```
 scripts/run_pretrain.sh
-scripts/T5_run_pretrain.sh
 ```
 
 ## Acknowledgment
