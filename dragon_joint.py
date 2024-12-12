@@ -261,57 +261,35 @@ def calc_eval_accuracy(args, eval_set, model, loss_type, loss_func, debug, save_
 
 
 def create_miterator(qa_dataloader, mrc_dataloader=None, kgqa_dataloader=None):
-    qa_d   = qa_dataloader
-    mrc_d  = mrc_dataloader
-    kgqa_d = kgqa_dataloader
+    dataloaders = {
+        "qa": qa_dataloader,
+        "mrc": mrc_dataloader,
+        "kgqa": kgqa_dataloader
+    }
+    sizes = [len(loader) for loader in dataloaders.values() if loader is not None]
+    max_size = max(sizes) if sizes else 0
 
-    sizes = []
-    if qa_d is not None:
-        sizes.append(len(qa_d))
-    if mrc_d is not None:
-        sizes.append(len(mrc_d))
-    if kgqa_d is not None:
-        sizes.append(len(kgqa_d))
-    max_size = max(sizes)
-    
     def mtask_iter():
-        nonlocal qa_d, mrc_d, kgqa_d
-        if qa_d is not None:
-            qa_iter   = iter(qa_d)
-        if mrc_d is not None:
-            mrc_iter  = iter(mrc_d)
-        if kgqa_d is not None:
-            kgqa_iter = iter(kgqa_d)
-        for i in range(max_size):
-            qa_sample   = None
-            mrc_sample  = None
-            kgqa_sample = None
-            
-            if qa_d is not None:
-                try:
-                    qa_sample = next(qa_iter)
-                except StopIteration:
-                    qa_iter   = iter(qa_d)
-                    qa_sample = next(qa_iter)
-                
-            if mrc_d is not None:
-                try:
-                    mrc_sample = next(mrc_iter)
-                except StopIteration:
-                    mrc_iter   = iter(mrc_d)
-                    mrc_sample = next(mrc_iter)
-                
-            if kgqa_d is not None:
-                try:
-                    kgqa_sample = next(kgqa_iter)
-                except StopIteration:
-                    kgqa_iter   = iter(kgqa_d)
-                    kgqa_sample = next(kgqa_iter)
-                
-            yield qa_sample, mrc_sample, kgqa_sample
-            
-    return mtask_iter
+        iterators = {
+            key: iter(loader) for key, loader in dataloaders.items() if loader is not None
+        }
 
+        for _ in range(max_size):
+            samples = {}
+            for key, iterator in iterators.items():
+                try:
+                    samples[key] = next(iterator)
+                except StopIteration:
+                    iterators[key] = iter(dataloaders[key])
+                    samples[key] = next(iterators[key])
+
+            yield (
+                samples.get("qa"),
+                samples.get("mrc"),
+                samples.get("kgqa")
+            )
+
+    return mtask_iter
 
 def train(args, resume, has_test_split, devices, kg):
     print("args: {}".format(args))
